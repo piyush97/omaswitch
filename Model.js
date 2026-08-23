@@ -57,11 +57,27 @@ function filteredWindows(values, query) {
   })
 }
 
+// Build the shell command that focuses a window AND moves to its workspace.
+// Native toplevel activate does not always switch the visible workspace, so
+// the switch is requested explicitly: prefer Omarchy's Lua dispatcher form
+// (hl.dsp.focus), fall back to the plain focuswindow syntax for stock
+// Hyprland. Returns null when the window has no address, deferring to the
+// native activate path in Switcher.qml.
+function focusCommand(window) {
+  var raw = window && window.address
+  if (raw === null || raw === undefined || raw === "") return null
+  var rawAddress = String(raw)
+  var address = rawAddress.indexOf("0x") === 0 ? rawAddress : "0x" + rawAddress
+  return "hyprctl dispatch \"hl.dsp.focus({ window = 'address:" + address +
+    "' })\" >/dev/null 2>&1 || hyprctl dispatch focuswindow \"address:" + address + "\""
+}
+
 if (typeof module !== "undefined") module.exports = {
   appId: appId,
   label: label,
   detail: detail,
   isCurrent: isCurrent,
   sortedWindows: sortedWindows,
-  filteredWindows: filteredWindows
+  filteredWindows: filteredWindows,
+  focusCommand: focusCommand
 }
