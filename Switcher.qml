@@ -95,10 +95,15 @@ Item {
   function focusSelected() {
     var window = rows[selectedIndex]
     if (!window) return root.dismiss()
-    if (window.wayland && typeof window.wayland.activate === "function") {
+    if (window.address) {
+      // Foreign-toplevel activate does not move to the target window's
+      // workspace on all setups, so request the switch explicitly.
+      var rawAddress = String(window.address)
+      var address = rawAddress.indexOf("0x") === 0 ? rawAddress : "0x" + rawAddress
+      Quickshell.execDetached(["sh", "-c",
+        "hyprctl dispatch \"hl.dsp.focus({ window = 'address:" + address + "' })\" >/dev/null 2>&1 || hyprctl dispatch focuswindow \"address:" + address + "\""])
+    } else if (window.wayland && typeof window.wayland.activate === "function") {
       window.wayland.activate()
-    } else if (window.address) {
-      Quickshell.execDetached(["hyprctl", "dispatch", "focuswindow", "address:" + String(window.address)])
     }
     root.dismiss()
   }
