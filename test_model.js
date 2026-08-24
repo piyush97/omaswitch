@@ -34,3 +34,28 @@ assert.ok(Model.focusCommand(target).includes("|| hyprctl dispatch focuswindow \
 assert.equal(Model.focusCommand({}), null, "no address defers to native activate fallback")
 assert.equal(Model.focusCommand(null), null, "no window defers to native activate fallback")
 console.log("Model checks passed")
+
+// --- MRU ordering: unranked windows (no meaningful focusHistoryID) ---
+// Hyprland reports focusHistoryID: null / "" for windows not meaningfully in
+// the focus history (transient/popup clients). Number(null) === 0 and
+// Number("") === 0, so the old historyRank() wrongly ranked them as the
+// current window (rank 0), surfacing stale windows above genuinely recent
+// ones and mislabeling them as current. They must sort AFTER all ranked
+// windows, in source order, and never be treated as current.
+const editorCur = { title: "Editor", activated: true, lastIpcObject: { focusHistoryID: 0 }, wayland: { appId: "ed" } }
+const termPrev = { title: "Term", activated: false, lastIpcObject: { focusHistoryID: 1 }, wayland: { appId: "foot" } }
+const staleNull = { title: "StalePopup", activated: false, lastIpcObject: { focusHistoryID: null }, wayland: { appId: "popup" } }
+const staleEmpty = { title: "Mystery", activated: false, lastIpcObject: { focusHistoryID: "" }, wayland: { appId: "unknown" } }
+const staleBlank = { title: "Blank", activated: false, lastIpcObject: { focusHistoryID: " " }, wayland: { appId: "blank" } }
+
+assert.deepEqual(
+  Model.sortedWindows([termPrev, editorCur, staleNull, staleEmpty, staleBlank]).map(function(w) { return w.title }),
+  ["Editor", "Term", "StalePopup", "Mystery", "Blank"],
+  "unranked windows must sort AFTER ranked ones, in source order"
+)
+
+assert.equal(Model.isCurrent(staleNull), false, "null focusHistoryID must not be current")
+assert.equal(Model.isCurrent(staleEmpty), false, "empty focusHistoryID must not be current")
+assert.equal(Model.isCurrent({ activated: false, lastIpcObject: {} }), false, "missing focusHistoryID must not be current")
+assert.equal(Model.isCurrent(editorCur), true, "activated window must be current")
+assert.equal(Model.isCurrent({ activated: false, lastIpcObject: { focusHistoryID: 0 } }), true, "real rank 0 must be current")

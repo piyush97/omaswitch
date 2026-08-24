@@ -23,9 +23,20 @@ function detail(window) {
   return boundedText(value)
 }
 
+// Hyprland's focusHistoryID is a rank in the compositor's global focus-history
+// list: 0 = currently focused, 1 = most recent before that, ascending = older.
+// Transient/popup windows not meaningfully in that history can report null or
+// an empty string. Number(null) === 0 and Number("") === 0, so we must guard
+// before coercion — otherwise such windows are ranked 0 (treated as current)
+// and surface above genuinely recent ones.
 function historyRank(window) {
   var ipc = window && window.lastIpcObject ? window.lastIpcObject : {}
-  var rank = Number(ipc.focusHistoryID)
+  var raw = ipc.focusHistoryID
+  if (raw === null || raw === undefined) return 1000000
+  // "" and " " both coerce to 0; discard empty/whitespace values (transient
+  // windows not meaningfully in the focus history).
+  if (typeof raw !== "number" && String(raw).trim() === "") return 1000000
+  var rank = Number(raw)
   return isFinite(rank) && rank >= 0 ? rank : 1000000
 }
 
