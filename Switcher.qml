@@ -92,6 +92,21 @@ Item {
     rebuildRows()
   }
 
+  function iconSource(window) {
+    var entries = DesktopEntries.applications.values || []
+    var entry = Model.desktopEntryForWindow(window, entries)
+    var library = root.shell ? root.shell.appLibrary : null
+    if (entry && library && typeof library.iconSource === "function")
+      return library.iconSource(entry.icon)
+    if (entry && entry.icon) {
+      var entryIcon = Quickshell.iconPath(String(entry.icon), true)
+      if (entryIcon) return entryIcon
+    }
+    var appIcon = Quickshell.iconPath(Model.appId(window), true)
+    if (appIcon) return appIcon
+    return Quickshell.iconPath("application-x-executable", true)
+  }
+
   function focusSelected() {
     var window = rows[selectedIndex]
     if (!window) return root.dismiss()
@@ -126,6 +141,8 @@ Item {
     root.filterText = ""
     root.selectedIndex = 0
     root.refresh()
+    if (root.shell && root.shell.appLibrary && typeof root.shell.appLibrary.refreshIcons === "function")
+      root.shell.appLibrary.refreshIcons()
     if (root.cycleMode && root.rows.length > 1 && Model.isCurrent(root.rows[0]))
       root.selectedIndex = direction < 0 ? root.rows.length - 1 : 1
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
@@ -236,31 +253,47 @@ Item {
                 color: index === root.selectedIndex ? root.selectedBackground : "transparent"
               }
 
-              Column {
+              Row {
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.left: parent.left
                 anchors.leftMargin: Style.space(10)
                 width: parent.width - Style.space(20)
-                spacing: 2
+                spacing: Style.space(8)
 
-                Text {
-                  text: Model.label(modelData)
-                  textFormat: Text.PlainText
-                  color: index === root.selectedIndex ? root.selectedText : root.foreground
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.body
-                  elide: Text.ElideRight
-                  width: parent.width
+                Image {
+                  width: Style.space(30)
+                  height: Style.space(30)
+                  anchors.verticalCenter: parent.verticalCenter
+                  fillMode: Image.PreserveAspectFit
+                  sourceSize.width: width * Screen.devicePixelRatio
+                  sourceSize.height: height * Screen.devicePixelRatio
+                  source: root.iconSource(modelData)
+                  asynchronous: true
                 }
-                Text {
-                  text: Model.detail(modelData)
-                  textFormat: Text.PlainText
-                  color: index === root.selectedIndex ? root.selectedText : root.foreground
-                  opacity: 0.6
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
-                  elide: Text.ElideRight
-                  width: parent.width
+
+                Column {
+                  width: parent.width - Style.space(38)
+                  spacing: 2
+
+                  Text {
+                    text: Model.label(modelData)
+                    textFormat: Text.PlainText
+                    color: index === root.selectedIndex ? root.selectedText : root.foreground
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.body
+                    elide: Text.ElideRight
+                    width: parent.width
+                  }
+                  Text {
+                    text: Model.detail(modelData)
+                    textFormat: Text.PlainText
+                    color: index === root.selectedIndex ? root.selectedText : root.foreground
+                    opacity: 0.6
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                    elide: Text.ElideRight
+                    width: parent.width
+                  }
                 }
               }
 

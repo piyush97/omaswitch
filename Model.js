@@ -23,6 +23,38 @@ function detail(window) {
   return boundedText(value)
 }
 
+function normalizedAppIdentity(value) {
+  return String(value || "").toLowerCase().replace(/\.desktop$/, "").replace(/[^a-z0-9]/g, "")
+}
+
+// Window app IDs and .desktop IDs are not always identical (for example,
+// "code" vs "visual-studio-code"). Prefer exact matches, then use a small,
+// deterministic fuzzy match across the desktop ID, name, and icon name.
+function desktopEntryForWindow(window, entries) {
+  var needle = normalizedAppIdentity(appId(window))
+  if (!needle) return null
+  var values = entries && typeof entries.slice === "function" ? entries : []
+  var best = null
+  var bestScore = 0
+  for (var i = 0; i < values.length; i++) {
+    var entry = values[i]
+    if (!entry) continue
+    var id = normalizedAppIdentity(entry.id)
+    var name = normalizedAppIdentity(entry.name)
+    var icon = normalizedAppIdentity(entry.icon)
+    var score = 0
+    if (needle === id) score = 120
+    else if (needle === name || needle === icon) score = 110
+    else if (needle.length >= 4 && (id.indexOf(needle) >= 0 || name.indexOf(needle) >= 0 || icon.indexOf(needle) >= 0)) score = 80
+    else if (id.length >= 4 && needle.indexOf(id) >= 0) score = 70
+    if (score > bestScore) {
+      bestScore = score
+      best = entry
+    }
+  }
+  return best
+}
+
 // Hyprland's focusHistoryID is a rank in the compositor's global focus-history
 // list: 0 = currently focused, 1 = most recent before that, ascending = older.
 // Transient/popup windows not meaningfully in that history can report null or
@@ -87,6 +119,8 @@ if (typeof module !== "undefined") module.exports = {
   appId: appId,
   label: label,
   detail: detail,
+  normalizedAppIdentity: normalizedAppIdentity,
+  desktopEntryForWindow: desktopEntryForWindow,
   isCurrent: isCurrent,
   sortedWindows: sortedWindows,
   filteredWindows: filteredWindows,

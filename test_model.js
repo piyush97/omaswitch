@@ -14,6 +14,17 @@ assert.equal(Model.detail(old), "obsidian · ws 3")
 assert.equal(Model.label({ title: "x".repeat(161) }), "x".repeat(159) + "…")
 assert.equal(Model.detail({ wayland: { appId: "x".repeat(161) } }), "x".repeat(159) + "…")
 
+// --- application icon lookup ---
+const desktopEntries = [
+  { id: "foot.desktop", name: "Foot", icon: "foot" },
+  { id: "visual-studio-code.desktop", name: "Visual Studio Code", icon: "visual-studio-code" },
+  { id: "org.telegram.desktop", name: "Telegram Desktop", icon: "telegram" }
+]
+assert.equal(Model.desktopEntryForWindow({ wayland: { appId: "foot" } }, desktopEntries), desktopEntries[0])
+assert.equal(Model.desktopEntryForWindow({ wayland: { appId: "code" } }, desktopEntries), desktopEntries[1])
+assert.equal(Model.desktopEntryForWindow({ lastIpcObject: { class: "telegram" } }, desktopEntries), desktopEntries[2])
+assert.equal(Model.desktopEntryForWindow({ wayland: { appId: "unknown-app" } }, desktopEntries), null)
+
 // --- focusCommand: switching to windows on other workspaces ---
 // Reproduces the bug: confirming a selection previously used the native
 // activate path, which focuses the window but does NOT move to its workspace,
