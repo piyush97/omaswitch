@@ -515,29 +515,17 @@ Item {
 
       Keys.priority: Keys.BeforeItem
       Keys.onPressed: function(event) {
-        var altCycleTab = root.cycleMode
-          && (event.modifiers & Qt.AltModifier)
-          && (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab)
-
-        // Alt+Tab is already handled by the Hyprland binding, which summons
-        // this plugin with a direction payload. Once the overlay owns keyboard
-        // focus, the same keypress may also arrive here. Consuming it prevents
-        // one physical Alt+Tab from advancing twice.
-        if (altCycleTab) {
-          event.accepted = true
-        } else if (event.key === Qt.Key_Escape) {
+        if (event.key === Qt.Key_Escape) {
           root.dismiss()
           event.accepted = true
         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
           root.focusSelected()
           event.accepted = true
         } else if (event.key === Qt.Key_Backtab || event.key === Qt.Key_Up || event.key === Qt.Key_Left) {
-          if (!event.isAutoRepeat)
-            root.select(-1)
+          root.select(-1)
           event.accepted = true
         } else if (event.key === Qt.Key_Tab || event.key === Qt.Key_Down || event.key === Qt.Key_Right) {
-          if (!event.isAutoRepeat)
-            root.select((event.modifiers & Qt.ShiftModifier) ? -1 : 1)
+          root.select((event.modifiers & Qt.ShiftModifier) ? -1 : 1)
           event.accepted = true
         } else if (Util.editsFilter(event, root.filterText)) {
           root.setFilter(Util.editedFilter(event, root.filterText))
