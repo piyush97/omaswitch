@@ -30,6 +30,7 @@ Item {
   // openPanelIds; we must not fight it, so `opened` is only our UI state.
   property bool opened: false
   property bool cycleMode: false
+  property bool previewAvailable: false
   property string filterText: ""
   property int selectedIndex: 0
 
@@ -47,7 +48,29 @@ Item {
   // rebuildRows() gets to clamp selectedIndex.
   readonly property var selectedToplevel: selectedIndex >= 0 && selectedIndex < rows.length ? rows[selectedIndex] : null
   readonly property bool previewWanted: root.opened && root.selectedToplevel !== null && !!root.selectedToplevel.wayland
-  readonly property bool previewActive: root.previewWanted && previewView.hasContent
+  // Keep the preview layout stable after the first frame arrives. Changing
+  // captureSource briefly clears hasContent; collapsing the pane during that
+  // gap makes the whole switcher visibly flash on every cycle.
+  readonly property bool previewActive: root.previewWanted && (root.previewAvailable || previewView.hasContent)
+
+  onSelectedToplevelChanged: {
+    if (!root.previewWanted) {
+      root.previewAvailable = false
+      previewFallbackTimer.stop()
+    } else if (root.previewAvailable) {
+      // Preserve the current geometry while the new capture source starts,
+      // but still allow the list-only fallback if it produces no frame.
+      previewFallbackTimer.restart()
+    }
+  }
+
+  Timer {
+    id: previewFallbackTimer
+    interval: 300
+    onTriggered: {
+      if (!previewView.hasContent) root.previewAvailable = false
+    }
+  }
 
   readonly property int cardWidth: Math.min(root.previewActive ? Style.space(1080) : Style.space(760), panel.width - Style.gapsOut * 2)
   readonly property int desiredListHeight: Math.max(root.rowHeight, rows.length * root.rowHeight)
@@ -87,8 +110,34 @@ Item {
     rebuildRows()
   }
 
+  // Addresses of windows we have seen focused, most recent first.
+  //
+  // Ranking straight off lastIpcObject.focusHistoryID is not reliable: that
+  // object is a cached snapshot which is not refreshed when focus moves, so it
+  // can name a stale window as rank 0. A window's Wayland `activated` flag is
+  // no help either, since it reads false for every toplevel while this overlay
+  // holds exclusive keyboard focus. Tracking the compositor's own
+  // activewindowv2 events keeps the order correct; focusHistoryID stays the
+  // seed for windows we have not yet seen focused (it is accurate at startup).
+  property var mru: []
+
+  function noteFocus(rawAddress) {
+    var address = Model.normalizeAddress(rawAddress)
+    if (!address || (root.mru.length > 0 && root.mru[0] === address)) return
+    var next = [address]
+    for (var i = 0; i < root.mru.length; i++)
+      if (root.mru[i] !== address) next.push(root.mru[i])
+    root.mru = next
+  }
+
+  function mruRank(window) {
+    var address = Model.normalizeAddress(window && window.address)
+    var index = address ? root.mru.indexOf(address) : -1
+    return index >= 0 ? index : 1000000 + Model.historyRank(window)
+  }
+
   function refresh() {
-    allWindows = Model.sortedWindows(Hyprland.toplevels.values)
+    allWindows = Model.sortedWindows(Hyprland.toplevels.values, root.mruRank)
     rebuildRows()
   }
 
@@ -107,16 +156,48 @@ Item {
     return Quickshell.iconPath("application-x-executable", true)
   }
 
-  function focusSelected() {
-    var window = rows[selectedIndex]
-    if (!window) return root.dismiss()
+  // Selection waiting to be applied once this overlay is gone. See focusSelected().
+  property var pendingFocus: null
+
+  function applyPendingFocus() {
+    var window = root.pendingFocus
+    if (!window) return
+    root.pendingFocus = null
+    pendingFocusBackstop.stop()
     var command = Model.focusCommand(window)
     if (command) {
       Quickshell.execDetached(["sh", "-c", command])
     } else if (window.wayland && typeof window.wayland.activate === "function") {
       window.wayland.activate()
     }
+  }
+
+  // Backstop only: if the compositor emits no restore -- nothing was focused
+  // before we opened -- apply the selection anyway rather than dropping it.
+  Timer {
+    id: pendingFocusBackstop
+    interval: 250
+    repeat: false
+    onTriggered: root.applyPendingFocus()
+  }
+
+  // This overlay takes WlrKeyboardFocus.Exclusive, and Hyprland hands keyboard
+  // focus back to the previously focused toplevel when the layer surface
+  // unmaps: `closelayer` is followed a few milliseconds later by an
+  // activewindow/activewindowv2 naming the window focused before we opened.
+  // Focusing the selection while the overlay is still mapped is therefore
+  // undone by that restore.
+  //
+  // Dispatching first and dismissing immediately after only survived when the
+  // spawned hyprctl lost the race against the unmap; when it won, the restore
+  // clobbered the switch and releasing Alt appeared to do nothing. Dismiss
+  // first, then apply the selection once the restore has landed.
+  function focusSelected() {
+    var window = rows[selectedIndex]
+    if (!window) return root.dismiss()
+    root.pendingFocus = window
     root.dismiss()
+    pendingFocusBackstop.restart()
   }
 
   function select(delta) {
@@ -138,12 +219,15 @@ Item {
 
     root.opened = true
     root.cycleMode = payload.mode === "cycle"
+    root.previewAvailable = false
     root.filterText = ""
     root.selectedIndex = 0
     root.refresh()
     if (root.shell && root.shell.appLibrary && typeof root.shell.appLibrary.refreshIcons === "function")
       root.shell.appLibrary.refreshIcons()
-    if (root.cycleMode && root.rows.length > 1 && Model.isCurrent(root.rows[0]))
+    // rows[0] is the focused window by construction, so its neighbour is
+    // always a genuine switch target.
+    if (root.cycleMode && root.rows.length > 1)
       root.selectedIndex = direction < 0 ? root.rows.length - 1 : 1
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
@@ -151,12 +235,14 @@ Item {
   function close() {
     root.opened = false
     root.cycleMode = false
+    root.previewAvailable = false
   }
 
   // User-initiated dismissal also drops the host's openPanelIds entry.
   function dismiss() {
     root.opened = false
     root.cycleMode = false
+    root.previewAvailable = false
     if (root.shell && typeof root.shell.hide === "function")
       root.shell.hide((root.manifest && root.manifest.id) || "piyush.omaswitch")
   }
@@ -165,8 +251,18 @@ Item {
   Connections {
     target: Hyprland
     function onRawEvent(event) {
-      if (!root.opened) return
       var name = event ? String(event.name || "") : ""
+      if (name === "activewindowv2") {
+        // Tracked even while closed -- that is what keeps the order correct.
+        root.noteFocus(event.data)
+        // The post-unmap focus restore is the cue to apply a pending
+        // selection; applying before it would simply be overwritten.
+        if (root.pendingFocus) {
+          root.applyPendingFocus()
+          return
+        }
+      }
+      if (!root.opened) return
       if (name === "activewindow" || name === "closewindow" || name === "openwindow" ||
           name === "workspace" || name === "movewindow" || name.indexOf("windowtitle") === 0) {
         root.refresh()
@@ -324,6 +420,12 @@ Item {
             live: root.previewWanted
             paintCursor: false
             constraintSize: Qt.size(root.previewConstraintWidth, root.previewConstraintHeight)
+            onHasContentChanged: {
+              if (hasContent) {
+                root.previewAvailable = true
+                previewFallbackTimer.stop()
+              }
+            }
           }
         }
       }
