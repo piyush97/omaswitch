@@ -95,11 +95,9 @@ Type at least three characters. Title, app, and workspace matches appear instant
 
 When a window matches **only** because of text inside it, the preview draws a box around each occurrence, using Tesseract's page layout analysis to locate the words.
 
-**Languages.** OCR defaults to English. To add others, install the Tesseract language pack and set `OMARCHY_OCR_LANGS` in the environment the shell starts with:
+**Languages.** OCR defaults to English. To search other languages, install the matching Tesseract language data (for example, the `tesseract-data-fra` package for French), then set `OMARCHY_OCR_LANGS` in the environment the shell starts with, joining languages with `+`:
 
 ```bash
-sudo pacman -S tesseract-data-fra
-# then, e.g. in your session environment:
 OMARCHY_OCR_LANGS=eng+fra
 ```
 
