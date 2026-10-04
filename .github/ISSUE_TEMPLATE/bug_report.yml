@@ -1,0 +1,49 @@
+name: Bug report
+description: Something isn't working as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Alt+Tab doesn't open / switch
+        - Wrong window order
+        - Live preview
+        - Search by window contents (OCR)
+        - Quickshell crash
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: isolated
+    attributes:
+      label: Does it still happen with OmaSwitch disabled?
+      description: Run `omarchy plugin disable piyush.omaswitch` and retry. This separates plugin bugs from shell or compositor bugs.
+      options:
+        - "No — only with OmaSwitch enabled"
+        - "Yes — happens without OmaSwitch too"
+        - "Not checked"
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: OmaSwitch version, plus the output of `quickshell --version`.
+      placeholder: "OmaSwitch 1.3.0, Quickshell 0.3.1, Qt 6.11.2"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or crash report
+      description: For QML errors, `journalctl --user | grep -Ei 'piyush.omaswitch|Switcher.qml'`. For crashes, the Quickshell crash report.
+      render: text

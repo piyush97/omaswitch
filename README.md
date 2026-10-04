@@ -1,56 +1,58 @@
 # OmaSwitch
 
 [![CI](https://github.com/piyush97/omaswitch/actions/workflows/ci.yml/badge.svg)](https://github.com/piyush97/omaswitch/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/piyush97/omaswitch)](https://github.com/piyush97/omaswitch/releases/latest)
 [![Omarchy plugin](https://img.shields.io/badge/Omarchy-plugin-0f172a)](https://omarchyplugins.com/plugin.html?id=piyush.omaswitch)
-[![QML](https://img.shields.io/badge/QML-Qt-41CD52?logo=qt&logoColor=white)](Switcher.qml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**A familiar `Alt+Tab` switcher for Omarchy—with live window previews.**
-
-OmaSwitch puts your recently used windows in one fast, keyboard-first overlay. Cycle through them with `Alt+Tab`, type to find one by name or visible text, and see a live preview of the highlighted window before you switch.
-
-**Write-up:** [OmaSwitch: The Alt+Tab Omarchy Has Been Missing](https://piyushmehta.com/blog/omaswitch-alt-tab-omarchy)
+**The `Alt+Tab` Omarchy was missing: recent windows first, live previews, and search by what's actually on screen.**
 
 ![OmaSwitch showing a live terminal preview](preview.png)
 
-## Why you will like it
+OmaSwitch is a keyboard-first window switcher overlay for [Omarchy](https://omarchy.org/). Tap `Alt+Tab` to jump back to your last window, keep tapping to walk your history, or start typing to find a window by its title, app, workspace — or **any text visible inside it**.
 
-- **Recent windows first.** Uses Hyprland focus history, so the window you want is usually next.
-- **Preview before switching.** A live preview follows the selected row instead of showing stale screenshots.
-- **Search what you saw.** Type three or more characters to search visible window content with local OCR.
-- **Made for the keyboard.** Repeat `Alt+Tab`, search by typing, use arrows or Tab, then press Enter.
-- **Stays light.** Captures one OCR target at a time—never one stream per row.
-- **Fits Omarchy.** Follows your active Omarchy theme and needs no daemon, packages, or privileges.
+**Write-up:** [OmaSwitch: The Alt+Tab Omarchy Has Been Missing](https://piyushmehta.com/blog/omaswitch-alt-tab-omarchy)
+
+## Features
+
+- **Recent windows first.** Global most-recently-used order across all workspaces, so the window you want is usually one tap away.
+- **Live preview.** The highlighted window streams live in a side pane — no stale screenshots — with smooth, flicker-free handoff as you cycle.
+- **Search what you saw.** Type three or more characters and OmaSwitch reads the text inside your windows with on-device OCR. Remember an error code but not which of six terminals printed it? Type the code.
+- **See where it matched.** When a window matches only on its contents, the preview outlines exactly where that text appears.
+- **Keyboard-first, mouse-friendly.** Cycle, filter, and confirm without leaving the home row; click works too.
+- **Native to Omarchy.** Follows your active theme, uses app icons from your desktop entries, and needs no daemon, extra package, or elevated privilege.
 
 ## See it in action
 
-### Pick the project window without leaving the keyboard
-
-Search or cycle through windows, then confirm with Enter (or release Alt when the compositor forwards the release event).
+**Pick the project window without leaving the keyboard.** Search or cycle, then confirm with `Enter`.
 
 ![OmaSwitch with a project terminal preview](screenshots/terminal-preview.png)
 
-### Check a live `btop` preview before switching
-
-The preview changes with the selected row, making similarly named windows easy to distinguish.
+**Check a live preview before switching.** The preview follows the selection, so similarly named windows are easy to tell apart.
 
 ![OmaSwitch with a live btop preview](screenshots/btop-preview.png)
 
-## Add it to Omarchy
+## Install
 
 ```bash
 omarchy plugin add https://github.com/piyush97/omaswitch.git --enable
 ```
 
-It installs in your user configuration and needs no extra package, service, or configuration file.
+It installs into your user configuration. Nothing else is required — OCR uses the `tesseract` package that Omarchy already ships.
 
-> Live previews require Hyprland's `hyprland-toplevel-export-v1` protocol. If it is unavailable, switching and search still work; the preview pane stays empty and reserved so the layout remains stable.
+### Requirements
 
-## Make it your Alt+Tab switcher
+| Requirement | Why | If missing |
+| --- | --- | --- |
+| Omarchy Quattro (Quickshell + Hyprland) | Hosts the overlay | Plugin cannot load |
+| `hyprland-toplevel-export-v1` | Live previews and OCR captures | Switching and title search still work; preview pane stays empty |
+| `tesseract` (bundled with Omarchy) | Search inside window contents | Title/app/workspace search still works |
 
-Installing the plugin does **not** replace Omarchy's default `Alt+Tab` bindings. Complete this section once after installation.
+## Make it your Alt+Tab
 
-Omarchy binds `Alt+Tab` to direct cycling by default. Add this to `~/.config/hypr/bindings.lua` to replace those two bindings:
+> **Installing does not change your keybindings.** Omarchy's default `Alt+Tab` cycles windows directly and will keep doing so until you replace it. This one-time step is what most "it doesn't open" reports come down to.
+
+Add this to `~/.config/hypr/bindings.lua`:
 
 ```lua
 hl.unbind("ALT + TAB")
@@ -60,93 +62,146 @@ o.bind("ALT + TAB", "OmaSwitch", "omarchy-shell shell summon piyush.omaswitch '{
 o.bind("ALT + SHIFT + TAB", "OmaSwitch (reverse)", "omarchy-shell shell summon piyush.omaswitch '{\"mode\":\"cycle\",\"direction\":-1}'")
 ```
 
-Then reload Hyprland:
+Reload and confirm there are no errors:
 
 ```bash
 hyprctl reload
 hyprctl configerrors
 ```
 
-`configerrors` should print no errors. If you want to keep Omarchy's default bindings, bind either summon command to another key instead.
-
-## Familiar from the first keypress
-
-| Shortcut | What it does |
-| --- | --- |
-| `Alt+Tab` | Open the switcher and move to the next recent window |
-| `Alt+Shift+Tab` | Open the switcher and move backward |
-| `Tab`, `Down`, `Right` | Select the next window |
-| `Shift+Tab`, `Up`, `Left` | Select the previous window |
-| Type | Filter by title, application, workspace, or visible window text |
-| `Backspace` / `Ctrl+Backspace` | Delete a character / word from the search |
-| `Ctrl+U` | Clear the search |
-| `Enter` or click | Focus the selected window |
-| `Esc` or click outside | Close without switching |
-
-To open the searchable picker directly:
+Prefer to keep Omarchy's defaults? Bind either `summon` command to a different key instead. To open the searchable picker directly (no cycling):
 
 ```bash
 omarchy-shell shell toggle piyush.omaswitch
 ```
 
-### Search visible window text
+## Usage
 
-Type at least three characters. OmaSwitch first filters window metadata, then scans open windows one at a time and adds local OCR matches as they arrive.
+| Key | Action |
+| --- | --- |
+| `Alt+Tab` | Open and move to the next recent window |
+| `Alt+Shift+Tab` | Open and move backward |
+| `Tab`, `↓`, `→` | Next window |
+| `Shift+Tab`, `↑`, `←` | Previous window |
+| Type | Filter by title, app, workspace, or visible text |
+| `Backspace` / `Ctrl+Backspace` | Delete a character / word |
+| `Ctrl+U` | Clear the search |
+| `Enter` or click | Focus the selected window |
+| `Esc` or click outside | Close without switching |
 
-- OCR runs on-device with the `tesseract` package already included in Omarchy.
-- Captures and extracted text are session-only: each image stays in your private runtime directory only while it is scanned, then is deleted; the in-memory index clears when OmaSwitch closes.
-- Set `OMARCHY_OCR_LANGS` before starting the shell to select installed Tesseract languages, for example `eng+fra`.
-- Windows without a capturable Wayland toplevel still match by title, application, and workspace.
-- When a window matches only on visible text, the preview highlights where that text was found using Tesseract's page layout analysis.
+## Searching window contents
 
-## Keep it current
+Type at least three characters. Title, app, and workspace matches appear instantly; OmaSwitch then scans your open windows one at a time and adds content matches as they arrive (the header shows *searching contents…* while it works).
+
+When a window matches **only** because of text inside it, the preview draws a box around each occurrence, using Tesseract's page layout analysis to locate the words.
+
+**Languages.** OCR defaults to English. To add others, install the Tesseract language pack and set `OMARCHY_OCR_LANGS` in the environment the shell starts with:
+
+```bash
+sudo pacman -S tesseract-data-fra
+# then, e.g. in your session environment:
+OMARCHY_OCR_LANGS=eng+fra
+```
+
+**What OCR can't see.** Very small text, low-contrast text, and stylised fonts may be missed. Windows that can't be captured still match by title, app, and workspace.
+
+### Privacy
+
+OCR runs entirely on your machine — there is no network request and no AI service.
+
+- Each capture is written to your private runtime directory (`$XDG_RUNTIME_DIR`) only while it is scanned, then deleted.
+- Extracted text lives in memory only and is discarded when the switcher closes.
+- Scanning starts only after you type a search; simply cycling with `Alt+Tab` never runs OCR.
+
+## Update or remove
 
 ```bash
 omarchy plugin update piyush.omaswitch --yes
 ```
-
-To disable or remove it:
 
 ```bash
 omarchy plugin disable piyush.omaswitch
 omarchy plugin remove piyush.omaswitch --yes
 ```
 
+If you added the `Alt+Tab` bindings above, remove them from `bindings.lua` too, or `Alt+Tab` will do nothing.
+
 ## Troubleshooting
 
-**The plugin is not listed**
+<details>
+<summary><b>Alt+Tab still cycles windows directly</b></summary>
+
+The default bindings are still active. Make sure both `hl.unbind` lines are present, then:
+
+```bash
+hyprctl reload
+hyprctl configerrors
+omarchy menu keybindings --print | grep -E 'ALT \+ TAB|OmaSwitch'
+```
+
+</details>
+
+<details>
+<summary><b>The plugin isn't listed</b></summary>
 
 ```bash
 omarchy-shell shell rescanPlugins
 omarchy plugin list --json
 ```
 
-**Alt+Tab still directly cycles windows**
+</details>
 
-Confirm that the original bindings were unbound, then run:
+<details>
+<summary><b>It opens, but there's no preview</b></summary>
 
-```bash
-hyprctl reload
-hyprctl configerrors
-omarchy menu keybindings --print | grep -E 'ALT \+ TAB|SHIFT ALT \+ TAB|OmaSwitch'
-```
+The selected window may not be capturable, or your compositor lacks `hyprland-toplevel-export-v1`. This is expected fallback behavior — the list stays fully usable.
 
-**The plugin opens without a preview**
+</details>
 
-The selected window may not be capturable, or `hyprland-toplevel-export-v1` may be unavailable. This is expected fallback behavior; the list remains fully usable.
+<details>
+<summary><b>Searching doesn't find text I can see</b></summary>
 
-**The plugin reports a QML error**
+Check that Tesseract and your language data are installed (`tesseract --list-langs`), and that `OMARCHY_OCR_LANGS` names only installed languages. Small or low-contrast text is a known OCR limit. If something reasonable is still missed, please [open an issue](https://github.com/piyush97/omaswitch/issues/new) with the app and roughly what was on screen.
+
+</details>
+
+<details>
+<summary><b>Quickshell crashed</b></summary>
+
+There is a known upstream Quickshell crash on Qt 6.11.x (`QObjectWrapper::wrap`) that also affects setups without OmaSwitch. To check whether OmaSwitch is involved, run `omarchy plugin disable piyush.omaswitch` and see if the crash persists. Please include the crash report in an issue either way.
+
+</details>
+
+<details>
+<summary><b>A QML error appears</b></summary>
 
 ```bash
 journalctl --user -f | grep -Ei 'piyush.omaswitch|Switcher.qml|qml.*(error|warning)'
 ```
 
-## Development
+</details>
 
-```bash
-node test_model.js
-omarchy plugin validate .
-git diff --check
-```
+## How it works
 
-The plugin is MIT licensed; see [LICENSE](LICENSE). It is an independent community plugin and is not affiliated with Omarchy.
+| File | Role |
+| --- | --- |
+| [`Switcher.qml`](Switcher.qml) | The overlay: window list, double-buffered live preview, OCR capture queue, keyboard handling |
+| [`Model.js`](Model.js) | Pure logic — MRU ordering, filtering, OCR layout parsing, highlight geometry — testable without a compositor |
+| [`test_model.js`](test_model.js) | Regression suite, including the preview and OCR lifecycle |
+| [`manifest.json`](manifest.json) | Omarchy plugin manifest |
+
+Design choices worth knowing:
+
+- **No per-window streams.** Two capture views handle smooth preview handoff; a single extra capture runs only during an OCR search.
+- **No retained window objects.** The list holds plain snapshots, never compositor-owned objects, so a window closing mid-switch can't leave a dangling reference.
+- **Focus lands after the overlay closes.** Hyprland restores focus when the overlay unmaps; OmaSwitch applies your selection after that, so the switch always sticks.
+
+## Contributing
+
+Bug reports, ideas, and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Release history is in [CHANGELOG.md](CHANGELOG.md).
+
+Thanks to everyone who has contributed fixes and features, including [@ekropotin](https://github.com/ekropotin), [@ovsw](https://github.com/ovsw), [@kandosol](https://github.com/kandosol), [@zkiss](https://github.com/zkiss), and [@jefflord-pmg](https://github.com/jefflord-pmg) for the OCR idea.
+
+## License
+
+[MIT](LICENSE). OmaSwitch is an independent community plugin and is not affiliated with Omarchy.
