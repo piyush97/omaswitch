@@ -163,12 +163,77 @@ function filteredWindows(values, query, ocrTextByAddress) {
   var q = String(query || "").trim().toLowerCase()
   if (!q) return values.slice()
   return values.filter(function(window) {
-    var key = addressKey(window)
-    var ocr = key && ocrTextByAddress ? String(ocrTextByAddress[key] || "") : ""
-    var metadata = String(window && window.title || "") + " " + appId(window)
-    if (window && window.workspace) metadata += " ws " + String(window.workspace.id)
-    return (metadata + " " + ocr).toLowerCase().indexOf(q) !== -1
+    return metadataMatches(window, q) || ocrText(ocrTextByAddress, window).toLowerCase().indexOf(q) !== -1
   })
+}
+
+function metadataMatches(window, q) {
+  var metadata = String(window && window.title || "") + " " + appId(window)
+  if (window && window.workspace) metadata += " ws " + String(window.workspace.id)
+  return metadata.toLowerCase().indexOf(q) !== -1
+}
+
+function ocrEntry(ocrByAddress, window) {
+  var key = addressKey(window)
+  return key && ocrByAddress ? ocrByAddress[key] : null
+}
+
+function ocrText(ocrByAddress, window) {
+  var entry = ocrEntry(ocrByAddress, window)
+  return entry ? String(typeof entry === "string" ? entry : entry.text || "") : ""
+}
+
+// Parse `tesseract ... tsv`: Tesseract's page layout analysis groups words into
+// block/paragraph/line; boxes are normalised to 0..1 of the captured image.
+function parseOcrTsv(tsv) {
+  var rows = String(tsv || "").split("\n")
+  var pageW = 0, pageH = 0, words = 0
+  var lines = {}, order = []
+  for (var i = 1; i < rows.length && words < 4000; i++) {
+    var c = rows[i].split("	")
+    if (c.length < 12) continue
+    var level = Number(c[0])
+    if (level === 1) { pageW = Number(c[8]); pageH = Number(c[9]); continue }
+    var word = c.slice(11).join("\t").trim()
+    if (level !== 5 || !word || !(pageW > 0) || !(pageH > 0)) continue
+    var id = c[2] + "." + c[3] + "." + c[4]
+    if (!lines[id]) { lines[id] = []; order.push(id) }
+    lines[id].push({ text: word, x: Number(c[6]) / pageW, y: Number(c[7]) / pageH,
+                     w: Number(c[8]) / pageW, h: Number(c[9]) / pageH })
+    words++
+  }
+  var result = order.map(function(id) { return lines[id] })
+  var text = result.map(function(line) {
+    return line.map(function(w) { return w.text }).join(" ")
+  }).join("\n")
+  return { text: text.slice(0, 12000), lines: result }
+}
+
+// Boxes for OCR-only matches; metadata matches already explain themselves.
+function ocrHighlights(window, query, ocrByAddress) {
+  var q = String(query || "").trim().toLowerCase()
+  var entry = ocrEntry(ocrByAddress, window)
+  if (!q || !entry || !entry.lines || metadataMatches(window, q)) return []
+  var boxes = []
+  for (var i = 0; i < entry.lines.length && boxes.length < 24; i++) {
+    var line = entry.lines[i], text = "", spans = []
+    for (var j = 0; j < line.length; j++) {
+      if (j) text += " "
+      spans.push({ start: text.length, end: text.length + line[j].text.length })
+      text += line[j].text
+    }
+    var lower = text.toLowerCase()
+    for (var at = lower.indexOf(q); at !== -1 && boxes.length < 24; at = lower.indexOf(q, at + q.length)) {
+      var x1 = 1, y1 = 1, x2 = 0, y2 = 0
+      for (var k = 0; k < line.length; k++) {
+        if (spans[k].end <= at || spans[k].start >= at + q.length) continue
+        x1 = Math.min(x1, line[k].x); y1 = Math.min(y1, line[k].y)
+        x2 = Math.max(x2, line[k].x + line[k].w); y2 = Math.max(y2, line[k].y + line[k].h)
+      }
+      if (x2 > x1 && y2 > y1) boxes.push({ x: x1, y: y1, w: x2 - x1, h: y2 - y1 })
+    }
+  }
+  return boxes
 }
 
 // Build the shell command that focuses a window AND moves to its workspace.
@@ -191,6 +256,8 @@ if (typeof module !== "undefined") module.exports = {
   windowForAddress: windowForAddress,
   normalizedAppIdentity: normalizedAppIdentity,
   desktopEntryForWindow: desktopEntryForWindow,
+  parseOcrTsv: parseOcrTsv,
+  ocrHighlights: ocrHighlights,
   addressKey: addressKey,
   promoteAddress: promoteAddress,
   addressesByHistory: addressesByHistory,

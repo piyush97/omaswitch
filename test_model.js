@@ -17,6 +17,27 @@ assert.deepEqual(
   [visualOnly],
   "OCR text must participate in normal case-insensitive filtering"
 )
+// --- OCR layout: TSV word boxes become highlight regions for OCR-only matches ---
+const tsv = [
+  "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext",
+  "1\t1\t0\t0\t0\t0\t0\t0\t1000\t500\t-1\t",
+  "5	1\t1\t1\t1\t1\t100\t50\t200\t20\t95\tBuild",
+  "5	1\t1\t1\t1\t2\t320\t50\t300\t20\t95\tERR_404_DATABASE",
+  "5	1\t2\t1\t1\t1\t100\t400\t100\t20\t95\tother"
+].join("\n")
+const layout = Model.parseOcrTsv(tsv)
+assert.equal(layout.text, "Build ERR_404_DATABASE\nother")
+const ocrIndex = { abc: layout }
+const rounded = boxes => boxes.map(b => ({ x: +b.x.toFixed(4), y: +b.y.toFixed(4), w: +b.w.toFixed(4), h: +b.h.toFixed(4) }))
+assert.deepEqual(Model.filteredWindows([visualOnly], "err_404", ocrIndex), [visualOnly])
+assert.deepEqual(rounded(Model.ocrHighlights(visualOnly, "err_404", ocrIndex)), [{ x: 0.32, y: 0.1, w: 0.3, h: 0.04 }])
+assert.deepEqual(rounded(Model.ocrHighlights(visualOnly, "build err", ocrIndex)), [{ x: 0.1, y: 0.1, w: 0.52, h: 0.04 }],
+  "phrase matches span every overlapping word")
+assert.deepEqual(Model.ocrHighlights(visualOnly, "terminal", ocrIndex), [],
+  "metadata matches are not highlighted in the preview")
+assert.deepEqual(Model.ocrHighlights(visualOnly, "missing", ocrIndex), [])
+assert.deepEqual(Model.parseOcrTsv("").lines, [])
+
 const longTitle = { title: "x".repeat(180) + "needle", lastIpcObject: { class: "app" } }
 assert.deepEqual(Model.filteredWindows([longTitle], "needle"), [longTitle],
   "search must use full metadata rather than display-truncated labels")
@@ -90,7 +111,8 @@ assert.match(qml, /function close\(\)[\s\S]*?root\.rows = \[\][\s\S]*?root\.allW
 assert.match(qml, /filterText\.trim\(\)\.length >= 3[\s\S]*?beginOcrIndex\(\)/,
   "OCR must remain lazy until a meaningful search query exists")
 assert.ok(
-  qml.includes('"timeout", "5s", "tesseract", path, "stdout"') &&
+  qml.includes('"timeout", "8s", "tesseract", path, "stdout"') &&
+  qml.includes('"--dpi", "150", "tsv"]') &&
   qml.includes('Quickshell.execDetached(["rm", "-f", path])'),
   "OCR must invoke local tesseract without a shell and delete its temporary capture"
 )

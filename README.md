@@ -97,6 +97,7 @@ Type at least three characters. OmaSwitch first filters window metadata, then sc
 - Captures and extracted text are session-only: each image stays in your private runtime directory only while it is scanned, then is deleted; the in-memory index clears when OmaSwitch closes.
 - Set `OMARCHY_OCR_LANGS` before starting the shell to select installed Tesseract languages, for example `eng+fra`.
 - Windows without a capturable Wayland toplevel still match by title, application, and workspace.
+- When a window matches only on visible text, the preview highlights where that text was found using Tesseract's page layout analysis.
 
 ## Keep it current
 

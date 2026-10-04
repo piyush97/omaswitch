@@ -45,6 +45,8 @@ Item {
   property string filterText: ""
   property int selectedIndex: 0
   property var ocrTextByAddress: ({})
+  readonly property var previewHighlights: root.opened && selectedIndex >= 0 && selectedIndex < rows.length
+    ? Model.ocrHighlights(rows[selectedIndex], filterText, root.ocrTextByAddress) : []
   property var ocrQueue: []
   property string ocrAddress: ""
   property int ocrGeneration: 0
@@ -352,9 +354,11 @@ Item {
       String(Date.now()) + "-" + String(root.ocrCaptureSerial) + "-" +
       Math.random().toString(36).slice(2) + ".png"
     root.ocrImagePath = path
+    // Uniform scale: per-axis clamping distorted text and lost small glyphs.
     var size = ocrCaptureView.sourceSize
-    var target = Qt.size(Math.max(1, Math.min(1280, size.width)),
-                         Math.max(1, Math.min(720, size.height)))
+    var scale = Math.min(1, 1920 / Math.max(1, size.width, size.height))
+    var target = Qt.size(Math.max(1, Math.round(size.width * scale)),
+                         Math.max(1, Math.round(size.height * scale)))
     var started = ocrCaptureView.grabToImage(function(result) {
       if (generation !== root.ocrGeneration || address !== root.ocrAddress) {
         Quickshell.execDetached(["rm", "-f", path])
@@ -377,8 +381,8 @@ Item {
       ocrProcess.active = true
       var languages = Quickshell.env("OMARCHY_OCR_LANGS") || "eng"
       if (!/^[A-Za-z0-9_+-]+$/.test(languages)) languages = "eng"
-      ocrProcess.exec(["timeout", "5s", "tesseract", path, "stdout",
-        "--oem", "1", "--psm", "11", "-l", languages, "--dpi", "150"])
+      ocrProcess.exec(["timeout", "8s", "tesseract", path, "stdout",
+        "--oem", "1", "--psm", "11", "-l", languages, "--dpi", "150", "tsv"])
     }, target)
     if (!started) {
       Quickshell.execDetached(["rm", "-f", path])
@@ -392,8 +396,8 @@ Item {
     root.ocrWindow = null
     root.ocrGrabPending = false
     root.ocrImagePath = ""
-    var value = String(text || "").slice(0, 12000)
-    if (value.trim() !== "") {
+    var value = Model.parseOcrTsv(text)
+    if (value.text.trim() !== "") {
       var next = Object.assign({}, root.ocrTextByAddress)
       next[address] = value
       root.ocrTextByAddress = next
@@ -682,7 +686,7 @@ Item {
       captureSource: root.ocrCaptureSource
       live: false
       paintCursor: false
-      constraintSize: Qt.size(1280, 720)
+      constraintSize: Qt.size(1920, 1920)
       onHasContentChanged: {
         if (hasContent) Qt.callLater(root.grabOcrFrame)
       }
@@ -876,6 +880,34 @@ Item {
                 Math.min(root.previewConstraintWidth, parent.width),
                 Math.min(root.previewConstraintHeight, parent.height))
               onHasContentChanged: if (hasContent) root.previewReady(1)
+            }
+
+            // Where an OCR-only match was found, from Tesseract's layout boxes.
+            Item {
+              id: ocrHighlightLayer
+              readonly property ScreencopyView view: root.activePreview === 1 ? previewViewB : previewViewA
+              clip: true
+              x: view.x
+              y: view.y
+              width: view.width
+              height: view.height
+              z: 2
+              visible: root.previewAvailable && root.activePreview >= 0 && root.previewTarget === view.captureSource
+
+              Repeater {
+                model: root.previewHighlights
+                Rectangle {
+                  required property var modelData
+                  x: modelData.x * ocrHighlightLayer.width - 3
+                  y: modelData.y * ocrHighlightLayer.height - 2
+                  width: modelData.w * ocrHighlightLayer.width + 6
+                  height: modelData.h * ocrHighlightLayer.height + 4
+                  radius: 3
+                  color: Qt.rgba(root.selectedBackground.r, root.selectedBackground.g, root.selectedBackground.b, 0.25)
+                  border.color: root.selectedBackground
+                  border.width: 2
+                }
+              }
             }
           }
 
