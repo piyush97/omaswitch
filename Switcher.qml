@@ -44,7 +44,7 @@ Item {
   property string filterText: ""
   property int selectedIndex: 0
 
-  // Raw toplevels (live objects from the Hyprland singleton) + filtered rows.
+  // Scalar window snapshots + filtered rows; no QObjects in the delegate model.
   property var allWindows: []
   property var rows: []
 
@@ -56,13 +56,14 @@ Item {
 
   // Guard the index: assigning a shorter rows array notifies bindings before
   // rebuildRows() gets to clamp selectedIndex.
-  readonly property var selectedToplevel: selectedIndex >= 0 && selectedIndex < rows.length ? rows[selectedIndex] : null
+  readonly property HyprlandToplevel selectedToplevel: root.opened && selectedIndex >= 0 && selectedIndex < rows.length
+    ? Model.windowForAddress(Hyprland.toplevels.values, rows[selectedIndex].address) : null
   property bool previewAvailable: false
-  property var previewSourceA: null
-  property var previewSourceB: null
+  property Toplevel previewSourceA: null
+  property Toplevel previewSourceB: null
   property int activePreview: -1
   property int pendingPreview: -1
-  readonly property var previewTarget: root.opened && root.selectedToplevel && root.selectedToplevel.wayland
+  readonly property Toplevel previewTarget: root.opened && root.selectedToplevel && root.selectedToplevel.wayland
     ? root.selectedToplevel.wayland : null
   // Reserve the preview pane as soon as a capturable window is selected.
   // This keeps card geometry stable while the first screencopy frame arrives.
@@ -269,7 +270,7 @@ Item {
   }
 
   function refresh() {
-    allWindows = Model.sortedWindows(Hyprland.toplevels.values, root.mruAddresses)
+    allWindows = Model.sortedWindows(Hyprland.toplevels.values, root.mruAddresses).map(Model.windowSnapshot)
     rebuildRows()
   }
 
@@ -307,11 +308,10 @@ Item {
     if (!window) return
     root.pendingFocus = null
     pendingFocusBackstop.stop()
+    if (!Model.windowForAddress(Hyprland.toplevels.values, window.address)) return
     var command = Model.focusCommand(window)
     if (command) {
       Quickshell.execDetached(["sh", "-c", command])
-    } else if (window.wayland && typeof window.wayland.activate === "function") {
-      window.wayland.activate()
     }
   }
 
@@ -389,15 +389,31 @@ Item {
     root.geometryAnimationsReady = false
     root.opened = false
     root.cycleMode = false
+    root.resetPreview()
+    root.rows = []
+    root.allWindows = []
   }
 
   // User-initiated dismissal also drops the host's openPanelIds entry.
   function dismiss() {
-    root.geometryAnimationsReady = false
-    root.opened = false
-    root.cycleMode = false
+    root.close()
     if (root.shell && typeof root.shell.hide === "function")
       root.shell.hide((root.manifest && root.manifest.id) || "piyush.omaswitch")
+  }
+
+  Connections {
+    target: Hyprland.toplevels
+    function onObjectRemovedPre(window) {
+      var source = window ? window.wayland : null
+      if (root.selectedToplevel === window || root.previewSourceA === source || root.previewSourceB === source)
+        root.resetPreview()
+    }
+    function onObjectInsertedPost() {
+      if (root.opened) root.refresh()
+    }
+    function onObjectRemovedPost() {
+      if (root.opened) root.refresh()
+    }
   }
 
   // Keep the list fresh while open (windows open/close/rename).

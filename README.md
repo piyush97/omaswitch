@@ -47,6 +47,8 @@ It installs in your user configuration and needs no extra package, service, or c
 
 ## Make it your Alt+Tab switcher
 
+Installing the plugin does **not** replace Omarchy's default `Alt+Tab` bindings. Complete this section once after installation.
+
 Omarchy binds `Alt+Tab` to direct cycling by default. Add this to `~/.config/hypr/bindings.lua` to replace those two bindings:
 
 ```lua

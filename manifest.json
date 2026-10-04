@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "piyush.omaswitch",
   "name": "OmaSwitch",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "author": "piyush97",
   "license": "MIT",
   "description": "Windows-style Alt-Tab overlay with MRU ordering, search, and live previews.",

@@ -23,6 +23,25 @@ function detail(window) {
   return boundedText(value)
 }
 
+// ListView rows must not retain compositor-owned QObjects after a window closes.
+function windowSnapshot(window) {
+  return {
+    address: String(window.address || ""),
+    title: String(window.title || ""),
+    activated: !!window.activated,
+    workspace: window.workspace ? { id: window.workspace.id } : null,
+    lastIpcObject: { class: appId(window), focusHistoryID: historyRank(window) }
+  }
+}
+
+function windowForAddress(values, address) {
+  var key = addressKey(address)
+  if (!key) return null
+  for (var i = 0; i < values.length; i++)
+    if (addressKey(values[i]) === key) return values[i]
+  return null
+}
+
 function normalizedAppIdentity(value) {
   return String(value || "").toLowerCase().replace(/\.desktop$/, "").replace(/[^a-z0-9]/g, "")
 }
@@ -153,8 +172,7 @@ function filteredWindows(values, query) {
 // Native toplevel activate does not always switch the visible workspace, so
 // the switch is requested explicitly: prefer Omarchy's Lua dispatcher form
 // (hl.dsp.focus), fall back to the plain focuswindow syntax for stock
-// Hyprland. Returns null when the window has no address, deferring to the
-// native activate path in Switcher.qml.
+// Hyprland. Returns null when the compositor has not reported an address yet.
 function focusCommand(window) {
   var raw = window && window.address
   if (raw === null || raw === undefined || raw === "") return null
@@ -168,6 +186,8 @@ if (typeof module !== "undefined") module.exports = {
   appId: appId,
   label: label,
   detail: detail,
+  windowSnapshot: windowSnapshot,
+  windowForAddress: windowForAddress,
   normalizedAppIdentity: normalizedAppIdentity,
   desktopEntryForWindow: desktopEntryForWindow,
   addressKey: addressKey,

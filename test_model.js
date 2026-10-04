@@ -14,6 +14,28 @@ assert.equal(Model.detail(old), "obsidian · ws 3")
 assert.equal(Model.label({ title: "x".repeat(161) }), "x".repeat(159) + "…")
 assert.equal(Model.detail({ wayland: { appId: "x".repeat(161) } }), "x".repeat(159) + "…")
 
+// --- window lifetime: delegate rows contain scalars, never compositor QObjects ---
+const liveWindow = {
+  address: "0xabc",
+  title: "Editor",
+  activated: true,
+  wayland: { appId: "code" },
+  workspace: { id: 4 },
+  lastIpcObject: { focusHistoryID: 2 }
+}
+const snapshot = Model.windowSnapshot(liveWindow)
+assert.deepEqual(snapshot, {
+  address: "0xabc",
+  title: "Editor",
+  activated: true,
+  workspace: { id: 4 },
+  lastIpcObject: { class: "code", focusHistoryID: 2 }
+})
+assert.equal(snapshot.wayland, undefined, "delegate snapshots must not retain Toplevel QObjects")
+assert.notEqual(snapshot.workspace, liveWindow.workspace, "workspace metadata must be copied")
+assert.equal(Model.windowForAddress([liveWindow], "abc"), liveWindow)
+assert.equal(Model.windowForAddress([liveWindow], "0xdead"), null)
+
 // --- application icon lookup ---
 const desktopEntries = [
   { id: "foot.desktop", name: "Foot", icon: "foot" },
@@ -42,12 +64,17 @@ assert.ok(Model.focusCommand(target).startsWith("hyprctl dispatch \"hl.dsp.focus
   "primary dispatch must be the workspace-switching hl.dsp.focus form")
 assert.ok(Model.focusCommand(target).includes("|| hyprctl dispatch focuswindow \"address:0x55ea685ceda0\""),
   "plain focuswindow must remain as the stock-Hyprland fallback")
-assert.equal(Model.focusCommand({}), null, "no address defers to native activate fallback")
-assert.equal(Model.focusCommand(null), null, "no window defers to native activate fallback")
+assert.equal(Model.focusCommand({}), null, "no address cannot produce a focus command")
+assert.equal(Model.focusCommand(null), null, "no window cannot produce a focus command")
 // Exercise the shipped QML capture handlers without a compositor or timing luck.
 const fs = require("node:fs")
 const vm = require("node:vm")
 const qml = fs.readFileSync(__dirname + "/Switcher.qml", "utf8")
+assert.match(qml, /\.map\(Model\.windowSnapshot\)/, "ListView rows must use scalar snapshots")
+assert.match(qml, /onObjectRemovedPre\(window\)[\s\S]*?previewSourceA === source[\s\S]*?previewSourceB === source[\s\S]*?resetPreview\(\)/,
+  "capture sources must clear before any retained toplevel is destroyed")
+assert.match(qml, /function close\(\)[\s\S]*?root\.rows = \[\][\s\S]*?root\.allWindows = \[\]/,
+  "closing the overlay must release all row snapshots")
 const timeoutHandler = qml.match(/id: previewCaptureTimeout[\s\S]*?onTriggered: \{([\s\S]*?)^    \}/m)
 assert.ok(timeoutHandler, "pending preview captures must have bounded cancellation")
 const targetHandler = qml.match(/^  onPreviewTargetChanged: \{([\s\S]*?)^  \}/m)
