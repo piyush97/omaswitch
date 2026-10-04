@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
+import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
@@ -31,6 +32,8 @@ Item {
   property bool opened: false
   property bool cycleMode: false
   property bool previewAvailable: false
+  property var mruAddresses: []
+  property var pendingMruPromotions: []
   property string filterText: ""
   property int selectedIndex: 0
 
@@ -110,35 +113,20 @@ Item {
     rebuildRows()
   }
 
-  // Addresses of windows we have seen focused, most recent first.
-  //
-  // Ranking straight off lastIpcObject.focusHistoryID is not reliable: that
-  // object is a cached snapshot which is not refreshed when focus moves, so it
-  // can name a stale window as rank 0. A window's Wayland `activated` flag is
-  // no help either, since it reads false for every toplevel while this overlay
-  // holds exclusive keyboard focus. Tracking the compositor's own
-  // activewindowv2 events keeps the order correct; focusHistoryID stays the
-  // seed for windows we have not yet seen focused (it is accurate at startup).
-  property var mru: []
-
-  function noteFocus(rawAddress) {
-    var address = Model.normalizeAddress(rawAddress)
-    if (!address || (root.mru.length > 0 && root.mru[0] === address)) return
-    var next = [address]
-    for (var i = 0; i < root.mru.length; i++)
-      if (root.mru[i] !== address) next.push(root.mru[i])
-    root.mru = next
-  }
-
-  function mruRank(window) {
-    var address = Model.normalizeAddress(window && window.address)
-    var index = address ? root.mru.indexOf(address) : -1
-    return index >= 0 ? index : 1000000 + Model.historyRank(window)
-  }
-
   function refresh() {
-    allWindows = Model.sortedWindows(Hyprland.toplevels.values, root.mruRank)
+    allWindows = Model.sortedWindows(Hyprland.toplevels.values, root.mruAddresses)
     rebuildRows()
+  }
+
+  function seedMru(text) {
+    var clients = []
+    try { clients = JSON.parse(text || "[]") } catch (e) { clients = [] }
+    var seeded = Model.addressesByHistory(clients)
+    for (var i = root.pendingMruPromotions.length - 1; i >= 0; i--)
+      seeded = Model.promoteAddress(seeded, root.pendingMruPromotions[i])
+    root.pendingMruPromotions = []
+    root.mruAddresses = seeded
+    if (root.opened) root.refresh()
   }
 
   function iconSource(window) {
@@ -203,6 +191,7 @@ Item {
   function select(delta) {
     if (rows.length === 0) return
     selectedIndex = (selectedIndex + delta + rows.length) % rows.length
+    keepSelectionVisible.restart()
   }
 
   function open(payloadJson) {
@@ -253,8 +242,10 @@ Item {
     function onRawEvent(event) {
       var name = event ? String(event.name || "") : ""
       if (name === "activewindowv2") {
-        // Tracked even while closed -- that is what keeps the order correct.
-        root.noteFocus(event.data)
+        var address = event ? String(event.data || "") : ""
+        root.mruAddresses = Model.promoteAddress(root.mruAddresses, address)
+        if (mruSeedProcess.running)
+          root.pendingMruPromotions = Model.promoteAddress(root.pendingMruPromotions, address)
         // The post-unmap focus restore is the cue to apply a pending
         // selection; applying before it would simply be overwritten.
         if (root.pendingFocus) {
@@ -267,6 +258,28 @@ Item {
           name === "workspace" || name === "movewindow" || name.indexOf("windowtitle") === 0) {
         root.refresh()
       }
+    }
+  }
+
+  Process {
+    id: mruSeedProcess
+    command: ["hyprctl", "clients", "-j"]
+    running: true
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.seedMru(text)
+    }
+  }
+
+  // Do not bind ListView.currentIndex here. On Qt 6.11, changing that binding
+  // while a JavaScript array model is creating delegates can crash Qt. The
+  // row already draws its own selected state, so only coalesce scroll requests.
+  Timer {
+    id: keepSelectionVisible
+    interval: 0
+    onTriggered: {
+      if (root.opened && root.selectedIndex >= 0 && root.selectedIndex < root.rows.length)
+        listView.positionViewAtIndex(root.selectedIndex, ListView.Contain)
     }
   }
 
@@ -323,7 +336,6 @@ Item {
             width: parent.width
             height: root.listHeight
             model: root.rows
-            currentIndex: root.selectedIndex
             clip: true
 
             Text {
@@ -338,8 +350,6 @@ Item {
             }
 
             delegate: Item {
-              required property var modelData
-              required property int index
               width: listView.width
               height: root.rowHeight
 

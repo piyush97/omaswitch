@@ -114,4 +114,33 @@ assert.deepEqual(
 assert.equal(Model.historyRank(editorCur), 0, "ranked window keeps its history rank")
 assert.equal(Model.historyRank(staleNull), 1000000, "unranked window sorts last")
 
+// --- MRU ordering across workspaces ---
+// Quickshell's cached lastIpcObject ranks can become stale because focusing one
+// client changes every client's rank, while not every cached object refreshes.
+// The live activewindowv2 address order must take precedence across desktops.
+const wsCurrent = { address: "aaa", title: "Current", activated: true, lastIpcObject: { focusHistoryID: 0 }, workspace: { id: 5 } }
+const wsPrevious = { address: "0xbbb", title: "Previous", activated: false, lastIpcObject: { focusHistoryID: 9 }, workspace: { id: 2 } }
+const wsStaleSecond = { address: "ccc", title: "Stale second", activated: false, lastIpcObject: { focusHistoryID: 1 }, workspace: { id: 5 } }
+
+assert.deepEqual(
+  Model.sortedWindows([wsStaleSecond, wsPrevious, wsCurrent], ["0xaaa", "bbb", "0xccc"]).map(function(w) { return w.title }),
+  ["Current", "Previous", "Stale second"],
+  "live global MRU addresses must override stale cached ranks across workspaces"
+)
+assert.deepEqual(Model.promoteAddress(["aaa", "bbb", "ccc"], "0xbbb"), ["bbb", "aaa", "ccc"])
+assert.deepEqual(
+  Model.addressesByHistory([
+    { address: "0xccc", focusHistoryID: 8 },
+    { address: "0xaaa", focusHistoryID: 0 },
+    { address: "aaa", focusHistoryID: 0 },
+    { address: "0xbbb", focusHistoryID: 1 }
+  ]),
+  ["aaa", "bbb", "ccc"]
+)
+
+var replayed = ["newest", "older"]
+var seededMru = ["current", "previous", "oldest"]
+for (var replayIndex = replayed.length - 1; replayIndex >= 0; replayIndex--)
+  seededMru = Model.promoteAddress(seededMru, replayed[replayIndex])
+assert.deepEqual(seededMru, ["newest", "older", "current", "previous", "oldest"])
 console.log("Model checks passed")
