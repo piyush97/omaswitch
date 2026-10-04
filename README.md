@@ -7,7 +7,7 @@
 
 **A familiar `Alt+Tab` switcher for Omarchy—with live window previews.**
 
-OmaSwitch puts your recently used windows in one fast, keyboard-first overlay. Cycle through them with `Alt+Tab`, type to find one by name, and see a live preview of the highlighted window before you switch.
+OmaSwitch puts your recently used windows in one fast, keyboard-first overlay. Cycle through them with `Alt+Tab`, type to find one by name or visible text, and see a live preview of the highlighted window before you switch.
 
 **Write-up:** [OmaSwitch: The Alt+Tab Omarchy Has Been Missing](https://piyushmehta.com/blog/omaswitch-alt-tab-omarchy)
 
@@ -17,8 +17,9 @@ OmaSwitch puts your recently used windows in one fast, keyboard-first overlay. C
 
 - **Recent windows first.** Uses Hyprland focus history, so the window you want is usually next.
 - **Preview before switching.** A live preview follows the selected row instead of showing stale screenshots.
+- **Search what you saw.** Type three or more characters to search visible window content with local OCR.
 - **Made for the keyboard.** Repeat `Alt+Tab`, search by typing, use arrows or Tab, then press Enter.
-- **Stays light.** Uses a second capture stream only during preview handoff—never one stream per row.
+- **Stays light.** Captures one OCR target at a time—never one stream per row.
 - **Fits Omarchy.** Follows your active Omarchy theme and needs no daemon, packages, or privileges.
 
 ## See it in action
@@ -76,7 +77,7 @@ hyprctl configerrors
 | `Alt+Shift+Tab` | Open the switcher and move backward |
 | `Tab`, `Down`, `Right` | Select the next window |
 | `Shift+Tab`, `Up`, `Left` | Select the previous window |
-| Type | Filter by title, application, or workspace |
+| Type | Filter by title, application, workspace, or visible window text |
 | `Backspace` / `Ctrl+Backspace` | Delete a character / word from the search |
 | `Ctrl+U` | Clear the search |
 | `Enter` or click | Focus the selected window |
@@ -87,6 +88,15 @@ To open the searchable picker directly:
 ```bash
 omarchy-shell shell toggle piyush.omaswitch
 ```
+
+### Search visible window text
+
+Type at least three characters. OmaSwitch first filters window metadata, then scans open windows one at a time and adds local OCR matches as they arrive.
+
+- OCR runs on-device with the `tesseract` package already included in Omarchy.
+- Captures and extracted text are session-only: each image stays in your private runtime directory only while it is scanned, then is deleted; the in-memory index clears when OmaSwitch closes.
+- Set `OMARCHY_OCR_LANGS` before starting the shell to select installed Tesseract languages, for example `eng+fra`.
+- Windows without a capturable Wayland toplevel still match by title, application, and workspace.
 
 ## Keep it current
 

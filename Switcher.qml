@@ -18,7 +18,8 @@ import "Model.js" as Model
 // highlighted window via two alternating ScreencopyViews. The current frame
 // stays visible while the standby view starts the next capture, then swaps only
 // after the new frame is ready.
-// Only two capture views are used, not one per window. If the
+// Two preview views handle smooth handoff; one extra capture runs only during
+// local OCR search. No capture view is created per window. If the
 // compositor lacks the hyprland-toplevel-export protocol (or the view gets
 // no frames), the preview pane stays reserved but empty — the list width
 // does not jump while captures load or swap between windows.
@@ -43,6 +44,18 @@ Item {
   property var pendingMruPromotions: []
   property string filterText: ""
   property int selectedIndex: 0
+  property var ocrTextByAddress: ({})
+  property var ocrQueue: []
+  property string ocrAddress: ""
+  property int ocrGeneration: 0
+  property bool ocrGrabPending: false
+  property int ocrCaptureSerial: 0
+  property string ocrImagePath: ""
+  property HyprlandToplevel ocrWindow: null
+  readonly property Toplevel ocrCaptureSource: root.ocrWindow && root.ocrWindow.wayland
+    ? root.ocrWindow.wayland : null
+  readonly property bool ocrSearching: root.ocrAddress !== "" || root.ocrQueue.length > 0 || ocrProcess.active
+  property int openGeneration: 0
 
   // Scalar window snapshots + filtered rows; no QObjects in the delegate model.
   property var allWindows: []
@@ -258,7 +271,7 @@ Item {
   }
 
   function rebuildRows() {
-    rows = Model.filteredWindows(allWindows, filterText)
+    rows = Model.filteredWindows(allWindows, filterText, root.ocrTextByAddress)
     if (selectedIndex >= rows.length) selectedIndex = Math.max(0, rows.length - 1)
     if (selectedIndex < 0 && rows.length > 0) selectedIndex = 0
   }
@@ -267,6 +280,136 @@ Item {
     filterText = value
     selectedIndex = 0
     rebuildRows()
+    if (filterText.trim().length >= 3)
+      root.beginOcrIndex()
+    else
+      root.cancelOcrIndex()
+  }
+
+  function cancelOcrIndex() {
+    root.ocrGeneration++
+    root.ocrQueue = []
+    root.ocrAddress = ""
+    root.ocrWindow = null
+    root.ocrGrabPending = false
+    ocrCaptureTimeout.stop()
+    if (ocrProcess.running) ocrProcess.signal(15)
+    if (root.ocrImagePath) Quickshell.execDetached(["rm", "-f", root.ocrImagePath])
+    root.ocrImagePath = ""
+  }
+
+  function resetOcr() {
+    root.cancelOcrIndex()
+    root.ocrTextByAddress = ({})
+  }
+
+  function beginOcrIndex() {
+    if (!root.opened || root.filterText.trim().length < 3 || root.ocrSearching) return
+    var queue = []
+    for (var i = 0; i < root.allWindows.length; i++) {
+      var key = Model.addressKey(root.allWindows[i])
+      if (key && root.ocrTextByAddress[key] === undefined) queue.push(key)
+    }
+    root.ocrQueue = queue
+    root.startNextOcr()
+  }
+
+  function startNextOcr() {
+    root.ocrAddress = ""
+    root.ocrWindow = null
+    root.ocrGrabPending = false
+    root.ocrImagePath = ""
+    if (!root.opened || root.filterText.trim().length < 3) {
+      root.ocrQueue = []
+      return
+    }
+    if (ocrProcess.active) return
+    while (root.ocrQueue.length > 0) {
+      var next = root.ocrQueue.slice()
+      var address = next.shift()
+      root.ocrQueue = next
+      var window = Model.windowForAddress(Hyprland.toplevels.values, address)
+      if (!window || !window.wayland) continue
+      root.ocrAddress = address
+      root.ocrWindow = window
+      ocrCaptureTimeout.restart()
+      return
+    }
+  }
+
+  function grabOcrFrame() {
+    if (!root.ocrAddress || !root.ocrCaptureSource || root.ocrGrabPending || !ocrCaptureView.hasContent) return
+    root.ocrGrabPending = true
+    var address = root.ocrAddress
+    var generation = root.ocrGeneration
+    var runtimeDir = Quickshell.env("XDG_RUNTIME_DIR")
+    if (!/^\/[A-Za-z0-9._\/-]+$/.test(runtimeDir) || /(^|\/)\.\.(\/|$)/.test(runtimeDir)) {
+      root.finishOcr(address, "")
+      return
+    }
+    root.ocrCaptureSerial++
+    var path = runtimeDir + "/omaswitch-ocr-" +
+      String(Date.now()) + "-" + String(root.ocrCaptureSerial) + "-" +
+      Math.random().toString(36).slice(2) + ".png"
+    root.ocrImagePath = path
+    var size = ocrCaptureView.sourceSize
+    var target = Qt.size(Math.max(1, Math.min(1280, size.width)),
+                         Math.max(1, Math.min(720, size.height)))
+    var started = ocrCaptureView.grabToImage(function(result) {
+      if (generation !== root.ocrGeneration || address !== root.ocrAddress) {
+        Quickshell.execDetached(["rm", "-f", path])
+        return
+      }
+      ocrCaptureTimeout.stop()
+      root.ocrWindow = null
+      root.ocrGrabPending = false
+      if (!result || !result.saveToFile(path)) {
+        Quickshell.execDetached(["rm", "-f", path])
+        root.finishOcr(address, "")
+        return
+      }
+      ocrProcess.address = address
+      ocrProcess.generation = generation
+      ocrProcess.path = path
+      ocrProcess.output = ""
+      ocrProcess.streamDone = false
+      ocrProcess.exitedDone = false
+      ocrProcess.active = true
+      var languages = Quickshell.env("OMARCHY_OCR_LANGS") || "eng"
+      if (!/^[A-Za-z0-9_+-]+$/.test(languages)) languages = "eng"
+      ocrProcess.exec(["timeout", "5s", "tesseract", path, "stdout",
+        "--oem", "1", "--psm", "11", "-l", languages, "--dpi", "150"])
+    }, target)
+    if (!started) {
+      Quickshell.execDetached(["rm", "-f", path])
+      root.finishOcr(address, "")
+    }
+  }
+
+  function finishOcr(address, text) {
+    if (!address || address !== root.ocrAddress) return
+    ocrCaptureTimeout.stop()
+    root.ocrWindow = null
+    root.ocrGrabPending = false
+    root.ocrImagePath = ""
+    var value = String(text || "").slice(0, 12000)
+    if (value.trim() !== "") {
+      var next = Object.assign({}, root.ocrTextByAddress)
+      next[address] = value
+      root.ocrTextByAddress = next
+    }
+    root.rebuildRows()
+    root.startNextOcr()
+  }
+
+  function completeOcrProcess(address, generation, text, path) {
+    Quickshell.execDetached(["rm", "-f", path])
+    if (generation === root.ocrGeneration && address === root.ocrAddress)
+      root.finishOcr(address, text)
+    else if (root.opened && root.filterText.trim().length >= 3 && root.ocrAddress === "") {
+      if (root.ocrQueue.length > 0) root.startNextOcr()
+      else root.beginOcrIndex()
+    }
   }
 
   function refresh() {
@@ -361,7 +504,12 @@ Item {
       return
     }
 
+    root.openGeneration++
+    var generation = root.openGeneration
+    root.pendingFocus = null
+    pendingFocusBackstop.stop()
     root.resetPreview()
+    root.resetOcr()
     root.cycleMode = payload.mode === "cycle"
     root.filterText = ""
     root.selectedIndex = 0
@@ -380,16 +528,19 @@ Item {
     root.geometryAnimationsReady = false
     root.opened = true
     Qt.callLater(function() {
+      if (!root.opened || generation !== root.openGeneration) return
       root.geometryAnimationsReady = true
       keyCatcher.forceActiveFocus()
     })
   }
 
   function close() {
+    root.openGeneration++
     root.geometryAnimationsReady = false
     root.opened = false
     root.cycleMode = false
     root.resetPreview()
+    root.resetOcr()
     root.rows = []
     root.allWindows = []
   }
@@ -404,15 +555,23 @@ Item {
   Connections {
     target: Hyprland.toplevels
     function onObjectRemovedPre(window) {
+      root.resetOcr()
       var source = window ? window.wayland : null
       if (root.selectedToplevel === window || root.previewSourceA === source || root.previewSourceB === source)
         root.resetPreview()
     }
     function onObjectInsertedPost() {
-      if (root.opened) root.refresh()
+      if (root.opened) {
+        root.resetOcr()
+        root.refresh()
+        root.beginOcrIndex()
+      }
     }
     function onObjectRemovedPost() {
-      if (root.opened) root.refresh()
+      if (root.opened) {
+        root.refresh()
+        root.beginOcrIndex()
+      }
     }
   }
 
@@ -464,6 +623,72 @@ Item {
     }
   }
 
+  Timer {
+    id: ocrCaptureTimeout
+    interval: 1200
+    onTriggered: root.finishOcr(root.ocrAddress, "")
+  }
+
+  Process {
+    id: ocrProcess
+    property string address: ""
+    property int generation: -1
+    property string path: ""
+    property string output: ""
+    property bool streamDone: false
+    property bool exitedDone: false
+    property bool active: false
+
+    function maybeComplete() {
+      if (active && streamDone && exitedDone) {
+        active = false
+        root.completeOcrProcess(address, generation, output, path)
+      }
+    }
+
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        ocrProcess.output = text
+        ocrProcess.streamDone = true
+        ocrProcess.maybeComplete()
+      }
+    }
+    onExited: {
+      exitedDone = true
+      maybeComplete()
+    }
+  }
+
+  // A 1x1 non-interactive host keeps the capture in the scene graph while
+  // grabToImage renders the full toplevel offscreen.
+  PanelWindow {
+    id: ocrHost
+    visible: root.opened && root.ocrCaptureSource !== null
+    implicitWidth: 1
+    implicitHeight: 1
+    color: "transparent"
+    exclusionMode: ExclusionMode.Ignore
+    WlrLayershell.namespace: "piyush-omaswitch-ocr"
+    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    anchors { top: true; left: true }
+    mask: Region {}
+
+    ScreencopyView {
+      id: ocrCaptureView
+      width: Math.max(1, implicitWidth)
+      height: Math.max(1, implicitHeight)
+      captureSource: root.ocrCaptureSource
+      live: false
+      paintCursor: false
+      constraintSize: Qt.size(1280, 720)
+      onHasContentChanged: {
+        if (hasContent) Qt.callLater(root.grabOcrFrame)
+      }
+    }
+  }
+
   PanelWindow {
     id: panel
     visible: root.opened
@@ -511,7 +736,8 @@ Item {
           spacing: root.listGap
 
           Text {
-            text: root.filterText === "" ? "Switch window…" : "Filter: " + root.filterText
+            text: root.filterText === "" ? "Switch window…" :
+              "Filter: " + root.filterText + (root.ocrSearching ? " · searching contents…" : "")
             color: root.foreground
             font.family: root.fontFamily
             font.pixelSize: Style.font.title
@@ -530,7 +756,8 @@ Item {
               parent: listView
               anchors.centerIn: parent
               visible: root.rows.length === 0
-              text: root.filterText ? "No matching windows" : "No windows"
+              text: root.ocrSearching ? "Searching window contents…" :
+                (root.filterText ? "No matching windows" : "No windows")
               color: root.foreground
               opacity: 0.6
               font.family: root.fontFamily

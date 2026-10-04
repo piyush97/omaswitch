@@ -94,10 +94,8 @@ function historyRank(window) {
 // Addresses arrive as "0x55..." on toplevels but bare "55..." in the
 // activewindowv2 event payload; normalise before comparing.
 function normalizeAddress(raw) {
-  if (raw === null || raw === undefined) return ""
-  var value = String(raw).trim()
-  if (value === "") return ""
-  return value.indexOf("0x") === 0 ? value : "0x" + value
+  var key = addressKey(raw)
+  return key ? "0x" + key : ""
 }
 
 function isCurrent(window) {
@@ -111,7 +109,8 @@ function focusRank(window) {
 function addressKey(value) {
   var raw = value && typeof value === "object" ? value.address : value
   if (raw === null || raw === undefined) return ""
-  return String(raw).toLowerCase().replace(/^0x/, "")
+  var key = String(raw).trim().toLowerCase().replace(/^0x/, "")
+  return /^[0-9a-f]+$/.test(key) ? key : ""
 }
 
 function promoteAddress(values, address) {
@@ -160,11 +159,15 @@ function sortedWindows(values, rankFn) {
   return result
 }
 
-function filteredWindows(values, query) {
+function filteredWindows(values, query, ocrTextByAddress) {
   var q = String(query || "").trim().toLowerCase()
   if (!q) return values.slice()
   return values.filter(function(window) {
-    return (label(window) + " " + detail(window)).toLowerCase().indexOf(q) !== -1
+    var key = addressKey(window)
+    var ocr = key && ocrTextByAddress ? String(ocrTextByAddress[key] || "") : ""
+    var metadata = String(window && window.title || "") + " " + appId(window)
+    if (window && window.workspace) metadata += " ws " + String(window.workspace.id)
+    return (metadata + " " + ocr).toLowerCase().indexOf(q) !== -1
   })
 }
 
@@ -174,10 +177,8 @@ function filteredWindows(values, query) {
 // (hl.dsp.focus), fall back to the plain focuswindow syntax for stock
 // Hyprland. Returns null when the compositor has not reported an address yet.
 function focusCommand(window) {
-  var raw = window && window.address
-  if (raw === null || raw === undefined || raw === "") return null
-  var rawAddress = String(raw)
-  var address = rawAddress.indexOf("0x") === 0 ? rawAddress : "0x" + rawAddress
+  var address = normalizeAddress(window && window.address)
+  if (!address) return null
   return "hyprctl dispatch \"hl.dsp.focus({ window = 'address:" + address +
     "' })\" >/dev/null 2>&1 || hyprctl dispatch focuswindow \"address:" + address + "\""
 }

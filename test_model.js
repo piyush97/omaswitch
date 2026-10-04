@@ -10,6 +10,16 @@ assert.equal(Model.isCurrent(active), true)
 assert.equal(Model.isCurrent({ activated: false, lastIpcObject: { focusHistoryID: 0 } }), true)
 assert.deepEqual(Model.filteredWindows([active, previous, old], "foot"), [previous])
 assert.deepEqual(Model.filteredWindows([active, previous, old], "notes"), [old])
+const visualOnly = { address: "0xabc", title: "Terminal", lastIpcObject: { class: "kitty" } }
+assert.deepEqual(Model.filteredWindows([visualOnly], "ERR_404_DATABASE"), [])
+assert.deepEqual(
+  Model.filteredWindows([visualOnly], "ERR_404_DATABASE", { abc: "Build failed: ERR_404_DATABASE" }),
+  [visualOnly],
+  "OCR text must participate in normal case-insensitive filtering"
+)
+const longTitle = { title: "x".repeat(180) + "needle", lastIpcObject: { class: "app" } }
+assert.deepEqual(Model.filteredWindows([longTitle], "needle"), [longTitle],
+  "search must use full metadata rather than display-truncated labels")
 assert.equal(Model.detail(old), "obsidian · ws 3")
 assert.equal(Model.label({ title: "x".repeat(161) }), "x".repeat(159) + "…")
 assert.equal(Model.detail({ wayland: { appId: "x".repeat(161) } }), "x".repeat(159) + "…")
@@ -66,6 +76,8 @@ assert.ok(Model.focusCommand(target).includes("|| hyprctl dispatch focuswindow \
   "plain focuswindow must remain as the stock-Hyprland fallback")
 assert.equal(Model.focusCommand({}), null, "no address cannot produce a focus command")
 assert.equal(Model.focusCommand(null), null, "no window cannot produce a focus command")
+assert.equal(Model.focusCommand({ address: "abc'; touch /tmp/pwned; '" }), null,
+  "non-hex compositor addresses must never reach a shell command")
 // Exercise the shipped QML capture handlers without a compositor or timing luck.
 const fs = require("node:fs")
 const vm = require("node:vm")
@@ -75,6 +87,25 @@ assert.match(qml, /onObjectRemovedPre\(window\)[\s\S]*?previewSourceA === source
   "capture sources must clear before any retained toplevel is destroyed")
 assert.match(qml, /function close\(\)[\s\S]*?root\.rows = \[\][\s\S]*?root\.allWindows = \[\]/,
   "closing the overlay must release all row snapshots")
+assert.match(qml, /filterText\.trim\(\)\.length >= 3[\s\S]*?beginOcrIndex\(\)/,
+  "OCR must remain lazy until a meaningful search query exists")
+assert.ok(
+  qml.includes('"timeout", "5s", "tesseract", path, "stdout"') &&
+  qml.includes('Quickshell.execDetached(["rm", "-f", path])'),
+  "OCR must invoke local tesseract without a shell and delete its temporary capture"
+)
+assert.match(qml, /\^\[A-Za-z0-9_\+\-\]\+\$[\s\S]*?languages = "eng"/,
+  "OCR language configuration must be validated before reaching a process")
+assert.match(qml, /runtimeDir[\s\S]*?\(\^\|\\\/\)\\\.\\\.\(\\\/\|\$\)/,
+  "OCR must reject unsafe runtime directory traversal")
+assert.match(qml, /function resetOcr\(\)[\s\S]*?ocrTextByAddress = \(\{\}\)/,
+  "OCR text must remain session-only and clear when the overlay closes")
+assert.match(qml, /omaswitch-ocr-" \+[\s\S]*?Date\.now\(\)[\s\S]*?Math\.random\(\)/,
+  "each OCR capture must use a unique runtime-directory path")
+assert.match(qml, /property int generation: -1[\s\S]*?property bool streamDone: false[\s\S]*?property bool exitedDone: false[\s\S]*?property bool active: false/,
+  "OCR process reuse must wait for an immutable generation and both exit signals")
+assert.match(qml, /function onObjectRemovedPre\(window\) \{[\s\S]*?root\.resetOcr\(\)/,
+  "window topology changes must clear cached OCR text before an address can be reused")
 const timeoutHandler = qml.match(/id: previewCaptureTimeout[\s\S]*?onTriggered: \{([\s\S]*?)^    \}/m)
 assert.ok(timeoutHandler, "pending preview captures must have bounded cancellation")
 const targetHandler = qml.match(/^  onPreviewTargetChanged: \{([\s\S]*?)^  \}/m)
@@ -211,6 +242,7 @@ assert.equal(Model.normalizeAddress(""), "", "empty stays empty")
 assert.equal(Model.normalizeAddress("   "), "", "whitespace-only stays empty")
 assert.equal(Model.normalizeAddress(null), "", "null stays empty")
 assert.equal(Model.normalizeAddress(undefined), "", "undefined stays empty")
+assert.equal(Model.normalizeAddress("../escape"), "", "non-hex addresses are rejected")
 
 // --- sortedWindows(rankFn): caller-supplied ordering ---
 // lastIpcObject is a cached snapshot that is not refreshed when focus moves, so
@@ -267,9 +299,9 @@ assert.deepEqual(
   ["aaa", "bbb", "ccc"]
 )
 
-var replayed = ["newest", "older"]
-var seededMru = ["current", "previous", "oldest"]
+var replayed = ["ddd", "eee"]
+var seededMru = ["aaa", "bbb", "ccc"]
 for (var replayIndex = replayed.length - 1; replayIndex >= 0; replayIndex--)
   seededMru = Model.promoteAddress(seededMru, replayed[replayIndex])
-assert.deepEqual(seededMru, ["newest", "older", "current", "previous", "oldest"])
+assert.deepEqual(seededMru, ["ddd", "eee", "aaa", "bbb", "ccc"])
 console.log("Model checks passed")
