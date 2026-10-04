@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
+import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
@@ -17,10 +18,10 @@ import "Model.js" as Model
 // highlighted window via two alternating ScreencopyViews. The current frame
 // stays visible while the standby view starts the next capture, then swaps only
 // after the new frame is ready.
-// Wayland toplevel handle. One live stream, not one per window. If the
+// Only two capture views are used, not one per window. If the
 // compositor lacks the hyprland-toplevel-export protocol (or the view gets
-// no frames), the preview pane stays reserved for stable geometry but remains
-// empty until a frame becomes available.
+// no frames), the preview pane stays reserved but empty — the list width
+// does not jump while captures load or swap between windows.
 
 Item {
   id: root
@@ -38,6 +39,8 @@ Item {
   property real cardXScale: 1
   property real cardYScale: 1
   property bool cycleMode: false
+  property var mruAddresses: []
+  property var pendingMruPromotions: []
   property string filterText: ""
   property int selectedIndex: 0
 
@@ -63,27 +66,26 @@ Item {
     ? root.selectedToplevel.wayland : null
   // Reserve the preview pane as soon as a capturable window is selected.
   // This keeps card geometry stable while the first screencopy frame arrives.
-  readonly property bool previewActive: root.opened && root.previewTarget !== null
+  readonly property bool previewLayout: root.opened && root.previewTarget !== null
 
   onPreviewTargetChanged: {
     if (!previewTarget) {
-      root.previewAvailable = false
-      root.pendingPreview = -1
+      root.resetPreview()
       return
     }
     root.queuePreview(previewTarget)
   }
 
-  readonly property int cardWidth: Math.min(root.previewActive ? Style.space(1080) : Style.space(760), panel.width - Style.gapsOut * 2)
+  readonly property int cardWidth: Math.min(root.previewLayout ? Style.space(1080) : Style.space(760), panel.width - Style.gapsOut * 2)
   readonly property int desiredListHeight: Math.max(root.rowHeight, rows.length * root.rowHeight)
   readonly property int desiredCardHeight: root.contentMargin * 2 + root.headerHeight + root.listGap + root.desiredListHeight
   readonly property int cardHeight: Math.min(
-    Math.max(root.previewActive ? Style.space(400) : 0, root.desiredCardHeight),
+    Math.max(root.previewLayout ? Style.space(400) : 0, root.desiredCardHeight),
     panel.height - Style.gapsOut * 2)
   readonly property int contentHeight: Math.max(0, root.displayedCardHeight - root.contentMargin * 2)
   readonly property int innerWidth: Math.max(0, root.displayedCardWidth - root.contentMargin * 2)
-  readonly property int listWidth: root.previewActive ? Math.max(Style.space(300), Math.round(root.innerWidth * 0.40)) : root.innerWidth
-  readonly property int previewWidth: root.previewActive ? Math.max(0, root.innerWidth - root.listWidth - root.gap) : 0
+  readonly property int listWidth: root.previewLayout ? Math.max(Style.space(300), Math.round(root.innerWidth * 0.40)) : root.innerWidth
+  readonly property int previewWidth: root.previewLayout ? Math.max(0, root.innerWidth - root.listWidth - root.gap) : 0
   readonly property int listHeight: Math.max(0, root.contentHeight - root.headerHeight - root.listGap)
   // Positive before the pane appears, so ScreencopyView can obtain its first
   // frame and flip hasContent without depending on a zero-sized parent.
@@ -160,6 +162,36 @@ Item {
     easing.type: Easing.OutCubic
   }
 
+  function cancelPendingPreview() {
+    var index = root.pendingPreview
+    root.pendingPreview = -1
+    previewCaptureTimeout.stop()
+    if (index === 0) root.previewSourceA = null
+    else if (index === 1) root.previewSourceB = null
+  }
+
+  function resetPreview() {
+    root.cancelPendingPreview()
+    root.previewSourceA = null
+    root.previewSourceB = null
+    root.activePreview = -1
+    root.previewAvailable = false
+  }
+
+  Timer {
+    id: previewCaptureTimeout
+    interval: 300
+    onTriggered: {
+      var source = root.pendingPreview === 0 ? root.previewSourceA : root.previewSourceB
+      root.cancelPendingPreview()
+      if (root.opened && root.previewTarget && root.previewTarget !== source) {
+        Qt.callLater(function() {
+          if (root.opened) root.queuePreview(root.previewTarget)
+        })
+      }
+    }
+  }
+
   function queuePreview(source) {
     if (!root.opened || !source) return
 
@@ -191,6 +223,7 @@ Item {
     }
 
     root.pendingPreview = next
+    previewCaptureTimeout.restart()
     if (next === 0)
       root.previewSourceA = source
     else
@@ -207,7 +240,7 @@ Item {
       // The capture completed for an older selection. Do not show it and do
       // not retarget from inside this hasContent callback. Clear the in-flight
       // state first, then queue the latest selection on the next event turn.
-      root.pendingPreview = -1
+      root.cancelPendingPreview()
       Qt.callLater(function() {
         if (root.opened)
           root.queuePreview(root.previewTarget)
@@ -219,6 +252,7 @@ Item {
     // previous buffer alive behind it as standby for the next selection.
     root.activePreview = index
     root.pendingPreview = -1
+    previewCaptureTimeout.stop()
     root.previewAvailable = true
   }
 
@@ -235,25 +269,84 @@ Item {
   }
 
   function refresh() {
-    allWindows = Model.sortedWindows(Hyprland.toplevels.values)
+    allWindows = Model.sortedWindows(Hyprland.toplevels.values, root.mruAddresses)
     rebuildRows()
   }
 
-  function focusSelected() {
-    var window = rows[selectedIndex]
-    if (!window) return root.dismiss()
+  function seedMru(text) {
+    var clients = []
+    try { clients = JSON.parse(text || "[]") } catch (e) { clients = [] }
+    var seeded = Model.addressesByHistory(clients)
+    for (var i = root.pendingMruPromotions.length - 1; i >= 0; i--)
+      seeded = Model.promoteAddress(seeded, root.pendingMruPromotions[i])
+    root.pendingMruPromotions = []
+    root.mruAddresses = seeded
+    if (root.opened) root.refresh()
+  }
+
+  function iconSource(window) {
+    var entries = DesktopEntries.applications.values || []
+    var entry = Model.desktopEntryForWindow(window, entries)
+    var library = root.shell ? root.shell.appLibrary : null
+    if (entry && library && typeof library.iconSource === "function")
+      return library.iconSource(entry.icon)
+    if (entry && entry.icon) {
+      var entryIcon = Quickshell.iconPath(String(entry.icon), true)
+      if (entryIcon) return entryIcon
+    }
+    var appIcon = Quickshell.iconPath(Model.appId(window), true)
+    if (appIcon) return appIcon
+    return Quickshell.iconPath("application-x-executable", true)
+  }
+
+  // Selection waiting to be applied once this overlay is gone. See focusSelected().
+  property var pendingFocus: null
+
+  function applyPendingFocus() {
+    var window = root.pendingFocus
+    if (!window) return
+    root.pendingFocus = null
+    pendingFocusBackstop.stop()
     var command = Model.focusCommand(window)
     if (command) {
       Quickshell.execDetached(["sh", "-c", command])
     } else if (window.wayland && typeof window.wayland.activate === "function") {
       window.wayland.activate()
     }
+  }
+
+  // Backstop only: if the compositor emits no restore -- nothing was focused
+  // before we opened -- apply the selection anyway rather than dropping it.
+  Timer {
+    id: pendingFocusBackstop
+    interval: 250
+    repeat: false
+    onTriggered: root.applyPendingFocus()
+  }
+
+  // This overlay takes WlrKeyboardFocus.Exclusive, and Hyprland hands keyboard
+  // focus back to the previously focused toplevel when the layer surface
+  // unmaps: `closelayer` is followed a few milliseconds later by an
+  // activewindow/activewindowv2 naming the window focused before we opened.
+  // Focusing the selection while the overlay is still mapped is therefore
+  // undone by that restore.
+  //
+  // Dispatching first and dismissing immediately after only survived when the
+  // spawned hyprctl lost the race against the unmap; when it won, the restore
+  // clobbered the switch and releasing Alt appeared to do nothing. Dismiss
+  // first, then apply the selection once the restore has landed.
+  function focusSelected() {
+    var window = rows[selectedIndex]
+    if (!window) return root.dismiss()
+    root.pendingFocus = window
     root.dismiss()
+    pendingFocusBackstop.restart()
   }
 
   function select(delta) {
     if (rows.length === 0) return
     selectedIndex = (selectedIndex + delta + rows.length) % rows.length
+    keepSelectionVisible.restart()
   }
 
   function open(payloadJson) {
@@ -268,20 +361,20 @@ Item {
       return
     }
 
-    root.previewAvailable = false
-    root.previewSourceA = null
-    root.previewSourceB = null
-    root.activePreview = -1
-    root.pendingPreview = -1
+    root.resetPreview()
     root.cycleMode = payload.mode === "cycle"
     root.filterText = ""
     root.selectedIndex = 0
 
     // Build the initial model and choose the initial row before making the
-    // PanelWindow visible. previewActive can therefore start at its final
+    // PanelWindow visible. previewLayout can therefore start at its final
     // geometry instead of growing after the first screencopy frame arrives.
     root.refresh()
-    if (root.cycleMode && root.rows.length > 1 && Model.isCurrent(root.rows[0]))
+    if (root.shell && root.shell.appLibrary && typeof root.shell.appLibrary.refreshIcons === "function")
+      root.shell.appLibrary.refreshIcons()
+    // rows[0] is the focused window by construction, so its neighbour is
+    // always a genuine switch target.
+    if (root.cycleMode && root.rows.length > 1)
       root.selectedIndex = direction < 0 ? root.rows.length - 1 : 1
 
     root.geometryAnimationsReady = false
@@ -311,8 +404,20 @@ Item {
   Connections {
     target: Hyprland
     function onRawEvent(event) {
-      if (!root.opened) return
       var name = event ? String(event.name || "") : ""
+      if (name === "activewindowv2") {
+        var address = event ? String(event.data || "") : ""
+        root.mruAddresses = Model.promoteAddress(root.mruAddresses, address)
+        if (mruSeedProcess.running)
+          root.pendingMruPromotions = Model.promoteAddress(root.pendingMruPromotions, address)
+        // The post-unmap focus restore is the cue to apply a pending
+        // selection; applying before it would simply be overwritten.
+        if (root.pendingFocus) {
+          root.applyPendingFocus()
+          return
+        }
+      }
+      if (!root.opened) return
       if (name === "activewindow" || name === "closewindow" || name === "openwindow" ||
           name === "workspace" || name === "movewindow" || name.indexOf("windowtitle") === 0) {
         root.refresh()
@@ -321,6 +426,27 @@ Item {
   }
 
   Component.onCompleted: root.syncCardGeometry()
+  Process {
+    id: mruSeedProcess
+    command: ["hyprctl", "clients", "-j"]
+    running: true
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.seedMru(text)
+    }
+  }
+
+  // Do not bind ListView.currentIndex here. On Qt 6.11, changing that binding
+  // while a JavaScript array model is creating delegates can crash Qt. The
+  // row already draws its own selected state, so only coalesce scroll requests.
+  Timer {
+    id: keepSelectionVisible
+    interval: 0
+    onTriggered: {
+      if (root.opened && root.selectedIndex >= 0 && root.selectedIndex < root.rows.length)
+        listView.positionViewAtIndex(root.selectedIndex, ListView.Contain)
+    }
+  }
 
   PanelWindow {
     id: panel
@@ -382,7 +508,6 @@ Item {
             width: parent.width
             height: root.listHeight
             model: root.rows
-            currentIndex: root.selectedIndex
             clip: true
 
             Text {
@@ -397,8 +522,6 @@ Item {
             }
 
             delegate: Item {
-              required property var modelData
-              required property int index
               width: listView.width
               height: root.rowHeight
 
@@ -408,31 +531,47 @@ Item {
                 color: index === root.selectedIndex ? root.selectedBackground : "transparent"
               }
 
-              Column {
+              Row {
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.left: parent.left
                 anchors.leftMargin: Style.space(10)
                 width: parent.width - Style.space(20)
-                spacing: 2
+                spacing: Style.space(8)
 
-                Text {
-                  text: Model.label(modelData)
-                  textFormat: Text.PlainText
-                  color: index === root.selectedIndex ? root.selectedText : root.foreground
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.body
-                  elide: Text.ElideRight
-                  width: parent.width
+                Image {
+                  width: Style.space(30)
+                  height: Style.space(30)
+                  anchors.verticalCenter: parent.verticalCenter
+                  fillMode: Image.PreserveAspectFit
+                  sourceSize.width: width * Screen.devicePixelRatio
+                  sourceSize.height: height * Screen.devicePixelRatio
+                  source: root.iconSource(modelData)
+                  asynchronous: true
                 }
-                Text {
-                  text: Model.detail(modelData)
-                  textFormat: Text.PlainText
-                  color: index === root.selectedIndex ? root.selectedText : root.foreground
-                  opacity: 0.6
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
-                  elide: Text.ElideRight
-                  width: parent.width
+
+                Column {
+                  width: parent.width - Style.space(38)
+                  spacing: 2
+
+                  Text {
+                    text: Model.label(modelData)
+                    textFormat: Text.PlainText
+                    color: index === root.selectedIndex ? root.selectedText : root.foreground
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.body
+                    elide: Text.ElideRight
+                    width: parent.width
+                  }
+                  Text {
+                    text: Model.detail(modelData)
+                    textFormat: Text.PlainText
+                    color: index === root.selectedIndex ? root.selectedText : root.foreground
+                    opacity: 0.6
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                    elide: Text.ElideRight
+                    width: parent.width
+                  }
                 }
               }
 
@@ -444,12 +583,11 @@ Item {
           }
         }
 
-        // Right-side peek pane. Only visible once the view actually has a
-        // frame; width collapses to 0 and the list takes the whole card when
-        // the compositor cannot export windows.
+        // Right-side peek pane. Space is reserved while a previewable window is
+        // selected; the capture view fades in once frames arrive.
         BorderSurface {
           id: previewPane
-          visible: root.previewActive
+          visible: root.previewLayout
           width: root.previewWidth
           height: parent.height
           radius: root.cornerRadius

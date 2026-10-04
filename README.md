@@ -1,8 +1,15 @@
 # OmaSwitch
 
+[![CI](https://github.com/piyush97/omaswitch/actions/workflows/ci.yml/badge.svg)](https://github.com/piyush97/omaswitch/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Omarchy plugin](https://img.shields.io/badge/Omarchy-plugin-0f172a)](https://omarchyplugins.com/plugin.html?id=piyush.omaswitch)
+[![QML](https://img.shields.io/badge/QML-Qt-41CD52?logo=qt&logoColor=white)](Switcher.qml)
+
 **A familiar `Alt+Tab` switcher for Omarchy—with live window previews.**
 
 OmaSwitch puts your recently used windows in one fast, keyboard-first overlay. Cycle through them with `Alt+Tab`, type to find one by name, and see a live preview of the highlighted window before you switch.
+
+**Write-up:** [OmaSwitch: The Alt+Tab Omarchy Has Been Missing](https://piyushmehta.com/blog/omaswitch-alt-tab-omarchy)
 
 ![OmaSwitch showing a live terminal preview](preview.png)
 
@@ -36,7 +43,7 @@ omarchy plugin add https://github.com/piyush97/omaswitch.git --enable
 
 It installs in your user configuration and needs no extra package, service, or configuration file.
 
-> Live previews require Hyprland's `hyprland-toplevel-export-v1` protocol. If a preview frame is unavailable, switching and search still work; the preview area remains reserved so the switcher geometry stays stable.
+> Live previews require Hyprland's `hyprland-toplevel-export-v1` protocol. If it is unavailable, switching and search still work; the preview pane stays empty and reserved so the layout remains stable.
 
 ## Make it your Alt+Tab switcher
 
