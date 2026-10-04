@@ -110,21 +110,79 @@ Item {
     rebuildRows()
   }
 
+  // Addresses of windows we have seen focused, most recent first.
+  //
+  // Ranking straight off lastIpcObject.focusHistoryID is not reliable: that
+  // object is a cached snapshot which is not refreshed when focus moves, so it
+  // can name a stale window as rank 0. A window's Wayland `activated` flag is
+  // no help either, since it reads false for every toplevel while this overlay
+  // holds exclusive keyboard focus. Tracking the compositor's own
+  // activewindowv2 events keeps the order correct; focusHistoryID stays the
+  // seed for windows we have not yet seen focused (it is accurate at startup).
+  property var mru: []
+
+  function noteFocus(rawAddress) {
+    var address = Model.normalizeAddress(rawAddress)
+    if (!address || (root.mru.length > 0 && root.mru[0] === address)) return
+    var next = [address]
+    for (var i = 0; i < root.mru.length; i++)
+      if (root.mru[i] !== address) next.push(root.mru[i])
+    root.mru = next
+  }
+
+  function mruRank(window) {
+    var address = Model.normalizeAddress(window && window.address)
+    var index = address ? root.mru.indexOf(address) : -1
+    return index >= 0 ? index : 1000000 + Model.historyRank(window)
+  }
+
   function refresh() {
-    allWindows = Model.sortedWindows(Hyprland.toplevels.values)
+    allWindows = Model.sortedWindows(Hyprland.toplevels.values, root.mruRank)
     rebuildRows()
   }
 
-  function focusSelected() {
-    var window = rows[selectedIndex]
-    if (!window) return root.dismiss()
+  // Selection waiting to be applied once this overlay is gone. See focusSelected().
+  property var pendingFocus: null
+
+  function applyPendingFocus() {
+    var window = root.pendingFocus
+    if (!window) return
+    root.pendingFocus = null
+    pendingFocusBackstop.stop()
     var command = Model.focusCommand(window)
     if (command) {
       Quickshell.execDetached(["sh", "-c", command])
     } else if (window.wayland && typeof window.wayland.activate === "function") {
       window.wayland.activate()
     }
+  }
+
+  // Backstop only: if the compositor emits no restore -- nothing was focused
+  // before we opened -- apply the selection anyway rather than dropping it.
+  Timer {
+    id: pendingFocusBackstop
+    interval: 250
+    repeat: false
+    onTriggered: root.applyPendingFocus()
+  }
+
+  // This overlay takes WlrKeyboardFocus.Exclusive, and Hyprland hands keyboard
+  // focus back to the previously focused toplevel when the layer surface
+  // unmaps: `closelayer` is followed a few milliseconds later by an
+  // activewindow/activewindowv2 naming the window focused before we opened.
+  // Focusing the selection while the overlay is still mapped is therefore
+  // undone by that restore.
+  //
+  // Dispatching first and dismissing immediately after only survived when the
+  // spawned hyprctl lost the race against the unmap; when it won, the restore
+  // clobbered the switch and releasing Alt appeared to do nothing. Dismiss
+  // first, then apply the selection once the restore has landed.
+  function focusSelected() {
+    var window = rows[selectedIndex]
+    if (!window) return root.dismiss()
+    root.pendingFocus = window
     root.dismiss()
+    pendingFocusBackstop.restart()
   }
 
   function select(delta) {
@@ -150,7 +208,9 @@ Item {
     root.filterText = ""
     root.selectedIndex = 0
     root.refresh()
-    if (root.cycleMode && root.rows.length > 1 && Model.isCurrent(root.rows[0]))
+    // rows[0] is the focused window by construction, so its neighbour is
+    // always a genuine switch target.
+    if (root.cycleMode && root.rows.length > 1)
       root.selectedIndex = direction < 0 ? root.rows.length - 1 : 1
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
@@ -174,8 +234,18 @@ Item {
   Connections {
     target: Hyprland
     function onRawEvent(event) {
-      if (!root.opened) return
       var name = event ? String(event.name || "") : ""
+      if (name === "activewindowv2") {
+        // Tracked even while closed -- that is what keeps the order correct.
+        root.noteFocus(event.data)
+        // The post-unmap focus restore is the cue to apply a pending
+        // selection; applying before it would simply be overwritten.
+        if (root.pendingFocus) {
+          root.applyPendingFocus()
+          return
+        }
+      }
+      if (!root.opened) return
       if (name === "activewindow" || name === "closewindow" || name === "openwindow" ||
           name === "workspace" || name === "movewindow" || name.indexOf("windowtitle") === 0) {
         root.refresh()

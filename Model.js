@@ -40,6 +40,15 @@ function historyRank(window) {
   return isFinite(rank) && rank >= 0 ? rank : 1000000
 }
 
+// Addresses arrive as "0x55..." on toplevels but bare "55..." in the
+// activewindowv2 event payload; normalise before comparing.
+function normalizeAddress(raw) {
+  if (raw === null || raw === undefined) return ""
+  var value = String(raw).trim()
+  if (value === "") return ""
+  return value.indexOf("0x") === 0 ? value : "0x" + value
+}
+
 function isCurrent(window) {
   return !!(window && window.activated) || historyRank(window) === 0
 }
@@ -48,12 +57,16 @@ function focusRank(window) {
   return isCurrent(window) ? -1 : historyRank(window)
 }
 
-function sortedWindows(values) {
+// rankFn lets the caller supply a more reliable order than focusRank; see the
+// mru notes in Switcher.qml. Defaults to focusRank so the model stays usable
+// (and testable) on its own.
+function sortedWindows(values, rankFn) {
   var source = values && typeof values.slice === "function" ? values.slice() : []
+  var rank = typeof rankFn === "function" ? rankFn : focusRank
   var decorated = []
   for (var i = 0; i < source.length; i++) decorated.push({ value: source[i], index: i })
   decorated.sort(function(left, right) {
-    return focusRank(left.value) - focusRank(right.value) || left.index - right.index
+    return rank(left.value) - rank(right.value) || left.index - right.index
   })
   var result = []
   for (var j = 0; j < decorated.length; j++) result.push(decorated[j].value)
@@ -88,6 +101,8 @@ if (typeof module !== "undefined") module.exports = {
   label: label,
   detail: detail,
   isCurrent: isCurrent,
+  historyRank: historyRank,
+  normalizeAddress: normalizeAddress,
   sortedWindows: sortedWindows,
   filteredWindows: filteredWindows,
   focusCommand: focusCommand

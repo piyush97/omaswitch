@@ -59,3 +59,48 @@ assert.equal(Model.isCurrent(staleEmpty), false, "empty focusHistoryID must not 
 assert.equal(Model.isCurrent({ activated: false, lastIpcObject: {} }), false, "missing focusHistoryID must not be current")
 assert.equal(Model.isCurrent(editorCur), true, "activated window must be current")
 assert.equal(Model.isCurrent({ activated: false, lastIpcObject: { focusHistoryID: 0 } }), true, "real rank 0 must be current")
+
+// --- normalizeAddress: toplevel vs event-payload address forms ---
+// Toplevels expose "0x55ea685ceda0" while the activewindowv2 event payload is
+// the bare "55ea685ceda0". Comparing the two forms directly never matches, so
+// the MRU would never recognise the window that was just focused.
+assert.equal(Model.normalizeAddress("55ea685ceda0"), "0x55ea685ceda0", "bare address gains 0x")
+assert.equal(Model.normalizeAddress("0x55ea685ceda0"), "0x55ea685ceda0", "0x form is preserved")
+assert.equal(Model.normalizeAddress(" 55ea685ceda0 "), "0x55ea685ceda0", "surrounding space is trimmed")
+assert.equal(Model.normalizeAddress(""), "", "empty stays empty")
+assert.equal(Model.normalizeAddress("   "), "", "whitespace-only stays empty")
+assert.equal(Model.normalizeAddress(null), "", "null stays empty")
+assert.equal(Model.normalizeAddress(undefined), "", "undefined stays empty")
+
+// --- sortedWindows(rankFn): caller-supplied ordering ---
+// lastIpcObject is a cached snapshot that is not refreshed when focus moves, so
+// focusHistoryID can name a stale window as rank 0 and the cycle pre-selection
+// then lands on the window already focused. Switcher.qml supplies an MRU rank
+// built from activewindowv2 events instead; the default must stay focusRank.
+const byTitle = { Editor: 2, Term: 0, Notes: 1 }
+assert.deepEqual(
+  Model.sortedWindows([editorCur, termPrev, old], function(w) { return byTitle[w.title] }).map(function(w) { return w.title }),
+  ["Term", "Notes", "Editor"],
+  "rankFn must override focusRank"
+)
+assert.deepEqual(
+  Model.sortedWindows([termPrev, editorCur, old]).map(function(w) { return w.title }),
+  ["Editor", "Term", "Notes"],
+  "omitting rankFn must keep the focusRank default"
+)
+assert.deepEqual(
+  Model.sortedWindows([termPrev, editorCur, old], null).map(function(w) { return w.title }),
+  ["Editor", "Term", "Notes"],
+  "a non-function rankFn must fall back to focusRank"
+)
+assert.deepEqual(
+  Model.sortedWindows([editorCur, termPrev], function() { return 0 }).map(function(w) { return w.title }),
+  ["Editor", "Term"],
+  "equal ranks must preserve source order"
+)
+
+// historyRank is exported so Switcher.qml can seed unseen windows with it.
+assert.equal(Model.historyRank(editorCur), 0, "ranked window keeps its history rank")
+assert.equal(Model.historyRank(staleNull), 1000000, "unranked window sorts last")
+
+console.log("Model checks passed")
