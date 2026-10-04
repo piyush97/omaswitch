@@ -18,8 +18,8 @@ import "Model.js" as Model
 // highlighted window via a single ScreencopyView bound to that window's
 // Wayland toplevel handle. One live stream, not one per window. If the
 // compositor lacks the hyprland-toplevel-export protocol (or the view gets
-// no frames), hasContent stays false and the list simply stays full-width —
-// the same layout as the plain list version.
+// no frames), the preview pane stays reserved but empty — the list width
+// does not jump while captures load or swap between windows.
 
 Item {
   id: root
@@ -31,7 +31,6 @@ Item {
   // openPanelIds; we must not fight it, so `opened` is only our UI state.
   property bool opened: false
   property bool cycleMode: false
-  property bool previewAvailable: false
   property var mruAddresses: []
   property var pendingMruPromotions: []
   property string filterText: ""
@@ -51,40 +50,21 @@ Item {
   // rebuildRows() gets to clamp selectedIndex.
   readonly property var selectedToplevel: selectedIndex >= 0 && selectedIndex < rows.length ? rows[selectedIndex] : null
   readonly property bool previewWanted: root.opened && root.selectedToplevel !== null && !!root.selectedToplevel.wayland
-  // Keep the preview layout stable after the first frame arrives. Changing
-  // captureSource briefly clears hasContent; collapsing the pane during that
-  // gap makes the whole switcher visibly flash on every cycle.
-  readonly property bool previewActive: root.previewWanted && (root.previewAvailable || previewView.hasContent)
+  readonly property bool previewActive: root.previewWanted && previewView.hasContent
+  // Reserve the two-pane layout while a previewable window is selected, even
+  // before ScreencopyView delivers its first frame (or while it swaps sources).
+  readonly property bool previewLayout: root.previewWanted
 
-  onSelectedToplevelChanged: {
-    if (!root.previewWanted) {
-      root.previewAvailable = false
-      previewFallbackTimer.stop()
-    } else if (root.previewAvailable) {
-      // Preserve the current geometry while the new capture source starts,
-      // but still allow the list-only fallback if it produces no frame.
-      previewFallbackTimer.restart()
-    }
-  }
-
-  Timer {
-    id: previewFallbackTimer
-    interval: 300
-    onTriggered: {
-      if (!previewView.hasContent) root.previewAvailable = false
-    }
-  }
-
-  readonly property int cardWidth: Math.min(root.previewActive ? Style.space(1080) : Style.space(760), panel.width - Style.gapsOut * 2)
+  readonly property int cardWidth: Math.min(root.previewLayout ? Style.space(1080) : Style.space(760), panel.width - Style.gapsOut * 2)
   readonly property int desiredListHeight: Math.max(root.rowHeight, rows.length * root.rowHeight)
   readonly property int desiredCardHeight: root.contentMargin * 2 + root.headerHeight + root.listGap + root.desiredListHeight
   readonly property int cardHeight: Math.min(
-    Math.max(root.previewActive ? Style.space(400) : 0, root.desiredCardHeight),
+    Math.max(root.previewLayout ? Style.space(400) : 0, root.desiredCardHeight),
     panel.height - Style.gapsOut * 2)
   readonly property int contentHeight: Math.max(0, root.cardHeight - root.contentMargin * 2)
   readonly property int innerWidth: Math.max(0, root.cardWidth - root.contentMargin * 2)
-  readonly property int listWidth: root.previewActive ? Math.max(Style.space(300), Math.round(root.innerWidth * 0.40)) : root.innerWidth
-  readonly property int previewWidth: root.previewActive ? Math.max(0, root.innerWidth - root.listWidth - root.gap) : 0
+  readonly property int listWidth: root.previewLayout ? Math.max(Style.space(300), Math.round(root.innerWidth * 0.40)) : root.innerWidth
+  readonly property int previewWidth: root.previewLayout ? Math.max(0, root.innerWidth - root.listWidth - root.gap) : 0
   readonly property int listHeight: Math.max(0, root.contentHeight - root.headerHeight - root.listGap)
   // Positive before the pane appears, so ScreencopyView can obtain its first
   // frame and flip hasContent without depending on a zero-sized parent.
@@ -208,7 +188,6 @@ Item {
 
     root.opened = true
     root.cycleMode = payload.mode === "cycle"
-    root.previewAvailable = false
     root.filterText = ""
     root.selectedIndex = 0
     root.refresh()
@@ -224,14 +203,12 @@ Item {
   function close() {
     root.opened = false
     root.cycleMode = false
-    root.previewAvailable = false
   }
 
   // User-initiated dismissal also drops the host's openPanelIds entry.
   function dismiss() {
     root.opened = false
     root.cycleMode = false
-    root.previewAvailable = false
     if (root.shell && typeof root.shell.hide === "function")
       root.shell.hide((root.manifest && root.manifest.id) || "piyush.omaswitch")
   }
@@ -411,11 +388,10 @@ Item {
           }
         }
 
-        // Right-side peek pane. Only visible once the view actually has a
-        // frame; width collapses to 0 and the list takes the whole card when
-        // the compositor cannot export windows.
+        // Right-side peek pane. Space is reserved while a previewable window is
+        // selected; the capture view fades in once frames arrive.
         BorderSurface {
-          visible: root.previewActive
+          visible: root.previewLayout
           width: root.previewWidth
           height: parent.height
           radius: root.cornerRadius
@@ -426,15 +402,13 @@ Item {
           ScreencopyView {
             id: previewView
             anchors.centerIn: parent
+            opacity: root.previewActive ? 1 : 0
             captureSource: root.previewWanted ? root.selectedToplevel.wayland : null
             live: root.previewWanted
             paintCursor: false
             constraintSize: Qt.size(root.previewConstraintWidth, root.previewConstraintHeight)
-            onHasContentChanged: {
-              if (hasContent) {
-                root.previewAvailable = true
-                previewFallbackTimer.stop()
-              }
+            Behavior on opacity {
+              NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
             }
           }
         }
