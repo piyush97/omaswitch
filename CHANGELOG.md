@@ -2,6 +2,11 @@
 
 All notable changes to OmaSwitch. Versions match `manifest.json` and the [GitHub releases](https://github.com/piyush97/omaswitch/releases).
 
+## [1.3.1] — 2026-10-06
+
+### Fixed
+- High-DPI/4K OCR no longer shrinks 12px text to 6px. Captures enlarge glyphs up to 2x, preserve aspect ratio, and cap the physical long edge at 7680 pixels independently of display scaling. ([#12](https://github.com/piyush97/omaswitch/issues/12))
+
 ## [1.3.0] — 2026-10-04
 
 ### Added

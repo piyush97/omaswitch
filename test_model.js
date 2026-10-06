@@ -128,6 +128,39 @@ assert.match(qml, /property int generation: -1[\s\S]*?property bool streamDone: 
   "OCR process reuse must wait for an immutable generation and both exit signals")
 assert.match(qml, /function onObjectRemovedPre\(window\) \{[\s\S]*?root\.resetOcr\(\)/,
   "window topology changes must clear cached OCR text before an address can be reused")
+const grabHandler = qml.match(/^  function grabOcrFrame\(\) \{[\s\S]*?^  \}/m)
+assert.ok(grabHandler)
+const captureContext = vm.createContext({
+  Qt: { size: function(width, height) { return { width, height } } },
+  Quickshell: { env: function() { return "/run/user/1000" } }
+})
+vm.runInContext(grabHandler[0], captureContext)
+for (const [width, height, dpr, expectedWidth, expectedHeight] of [
+  [1920, 1080, 1, 3840, 2160],
+  [3840, 2160, 1, 7680, 4320],
+  [3840, 2160, 1.25, 7680, 4320],
+  [3840, 2160, 1.5, 7680, 4320],
+  [3840, 2160, 1.75, 7679, 4319],
+  [3840, 2160, 2, 7680, 4320],
+  [2160, 3840, 2, 4320, 7680],
+  [5120, 1440, 1, 7680, 2160],
+  [7680, 4320, 1, 7680, 4320],
+  [10240, 2880, 2, 7680, 2160]
+]) {
+  let target
+  captureContext.root = {
+    ocrAddress: "abc", ocrCaptureSource: {}, ocrGrabPending: false,
+    ocrGeneration: 1, ocrCaptureSerial: 0
+  }
+  captureContext.ocrCaptureView = {
+    hasContent: true, sourceSize: { width, height },
+    Screen: { devicePixelRatio: dpr },
+    grabToImage: function(callback, size) { target = size; return true }
+  }
+  captureContext.grabOcrFrame()
+  assert.deepEqual([Math.round(target.width * dpr), Math.round(target.height * dpr)], [expectedWidth, expectedHeight],
+    "OCR capture must enlarge small glyphs, preserve aspect ratio, and bound physical pixels independently of display scaling")
+}
 const timeoutHandler = qml.match(/id: previewCaptureTimeout[\s\S]*?onTriggered: \{([\s\S]*?)^    \}/m)
 assert.ok(timeoutHandler, "pending preview captures must have bounded cancellation")
 const targetHandler = qml.match(/^  onPreviewTargetChanged: \{([\s\S]*?)^  \}/m)

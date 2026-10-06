@@ -354,11 +354,13 @@ Item {
       String(Date.now()) + "-" + String(root.ocrCaptureSerial) + "-" +
       Math.random().toString(36).slice(2) + ".png"
     root.ocrImagePath = path
-    // Uniform scale: per-axis clamping distorted text and lost small glyphs.
+    // Enlarge small glyphs without downsampling 4K captures; bound the long edge.
+    // grabToImage multiplies its target by the host window's device pixel ratio.
     var size = ocrCaptureView.sourceSize
-    var scale = Math.min(1, 1920 / Math.max(1, size.width, size.height))
-    var target = Qt.size(Math.max(1, Math.round(size.width * scale)),
-                         Math.max(1, Math.round(size.height * scale)))
+    var scale = Math.min(2, 7680 / Math.max(1, size.width, size.height)) /
+      ocrCaptureView.Screen.devicePixelRatio
+    var target = Qt.size(Math.max(1, Math.floor(size.width * scale)),
+                         Math.max(1, Math.floor(size.height * scale)))
     var started = ocrCaptureView.grabToImage(function(result) {
       if (generation !== root.ocrGeneration || address !== root.ocrAddress) {
         Quickshell.execDetached(["rm", "-f", path])
