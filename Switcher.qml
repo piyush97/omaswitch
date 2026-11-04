@@ -492,6 +492,25 @@ Item {
     pendingFocusBackstop.restart()
   }
 
+  // The frame on screen can still be the standby buffer's previous window
+  // while a retarget is in flight or after a failed capture, so a click
+  // resolves the displayed source back to its row — the same commit as
+  // clicking that row. Falls back to the selection while nothing is showing.
+  function focusDisplayedPreview() {
+    var source = root.activePreview === 1 ? root.previewSourceB
+      : root.activePreview === 0 ? root.previewSourceA : null
+    if (source) {
+      for (var i = 0; i < root.rows.length; i++) {
+        var toplevel = Model.windowForAddress(Hyprland.toplevels.values, root.rows[i].address)
+        if (toplevel && toplevel.wayland === source) {
+          root.selectedIndex = i
+          break
+        }
+      }
+    }
+    root.focusSelected()
+  }
+
   function select(delta) {
     if (rows.length === 0) return
     selectedIndex = (selectedIndex + delta + rows.length) % rows.length
@@ -917,6 +936,11 @@ Item {
             anchors.fill: parent
             radius: previewPane.radius
             borderSpec: previewPane.previewBorderSpec
+          }
+
+          MouseArea {
+            anchors.fill: parent
+            onClicked: root.focusDisplayedPreview()
           }
         }
       }
