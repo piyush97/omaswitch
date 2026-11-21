@@ -42,6 +42,17 @@ assert.deepEqual(Model.ocrHighlights(visualOnly, "terminal", ocrIndex), [],
   "metadata matches are not highlighted in the preview")
 assert.deepEqual(Model.ocrHighlights(visualOnly, "missing", ocrIndex), [])
 assert.deepEqual(Model.parseOcrTsv("").lines, [])
+// toLowerCase() turns "İ" into two code units; later word boxes must not shift.
+const dottedTsv = [
+  "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext",
+  "1\t1\t0\t0\t0\t0\t0\t0\t1000\t500\t-1\t",
+  "5\t1\t1\t1\t1\t1\t0\t50\t100\t20\t95\tİSTANBUL",
+  "5\t1\t1\t1\t1\t2\t120\t50\t100\t20\t95\tİZMİR",
+  "5\t1\t1\t1\t1\t3\t320\t50\t300\t20\t95\tdeploy",
+  "5\t1\t1\t1\t1\t4\t700\t50\t100\t20\t95\tnow"
+].join("\n")
+assert.deepEqual(rounded(Model.ocrHighlights(visualOnly, "deploy", { abc: Model.parseOcrTsv(dottedTsv) })),
+  [{ x: 0.32, y: 0.1, w: 0.3, h: 0.04 }], "case folding that changes length must not shift highlight boxes")
 
 const longTitle = { title: "x".repeat(180) + "needle", lastIpcObject: { class: "app" } }
 assert.deepEqual(Model.filteredWindows([longTitle], "needle"), [longTitle],

@@ -225,13 +225,16 @@ function ocrHighlights(window, query, ocrByAddress) {
   if (!q || !entry || !entry.lines || metadataMatches(window, q)) return []
   var boxes = []
   for (var i = 0; i < entry.lines.length && boxes.length < 24; i++) {
-    var line = entry.lines[i], text = "", spans = []
+    // Lowercase per word before measuring spans: toLowerCase() can change
+    // length (for example "İ" becomes two code units), which would shift
+    // every later span away from the match index.
+    var line = entry.lines[i], lower = "", spans = []
     for (var j = 0; j < line.length; j++) {
-      if (j) text += " "
-      spans.push({ start: text.length, end: text.length + line[j].text.length })
-      text += line[j].text
+      if (j) lower += " "
+      var word = line[j].text.toLowerCase()
+      spans.push({ start: lower.length, end: lower.length + word.length })
+      lower += word
     }
-    var lower = text.toLowerCase()
     for (var at = lower.indexOf(q); at !== -1 && boxes.length < 24; at = lower.indexOf(q, at + q.length)) {
       var x1 = 1, y1 = 1, x2 = 0, y2 = 0
       for (var k = 0; k < line.length; k++) {
