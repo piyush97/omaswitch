@@ -2,7 +2,12 @@ var maxDisplayLength = 160
 
 function boundedText(value) {
   value = String(value || "")
-  return value.length > maxDisplayLength ? value.slice(0, maxDisplayLength - 1) + "…" : value
+  if (value.length <= maxDisplayLength) return value
+  var end = maxDisplayLength - 1
+  // Do not cut an emoji or other astral character in half.
+  var last = value.charCodeAt(end - 1)
+  if (last >= 0xd800 && last <= 0xdbff) end--
+  return value.slice(0, end) + "…"
 }
 
 function appId(window) {
