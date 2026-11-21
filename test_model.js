@@ -60,6 +60,9 @@ assert.deepEqual(Model.filteredWindows([longTitle], "needle"), [longTitle],
 assert.equal(Model.detail(old), "obsidian · ws 3")
 assert.equal(Model.label({ title: "x".repeat(161) }), "x".repeat(159) + "…")
 assert.equal(Model.detail({ wayland: { appId: "x".repeat(161) } }), "x".repeat(159) + "…")
+assert.equal(Model.label({ title: "x".repeat(158) + "😀 tail" }), "x".repeat(158) + "…",
+  "truncation must not leave half of a surrogate pair")
+assert.equal(Model.label({ title: "x".repeat(157) + "😀 tail" }), "x".repeat(157) + "😀…")
 
 // --- window lifetime: delegate rows contain scalars, never compositor QObjects ---
 const liveWindow = {
