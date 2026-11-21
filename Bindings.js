@@ -13,10 +13,6 @@ function block() {
 }
 
 function state(text) {
-  var hasBegin = text.indexOf(BEGIN) !== -1
-  var hasEnd = text.indexOf(END) !== -1
-  var managed = hasBegin && hasEnd
-  
   var handWritten = false
   var hasAppScope = false
   
@@ -27,11 +23,21 @@ function state(text) {
   for (var i = 0; i < lines.length; i++) {
     if (lines[i].indexOf(BEGIN) !== -1) {
       beginIdx = i
-    }
-    if (lines[i].indexOf(END) !== -1) {
-      endIdx = i
+      break
     }
   }
+  
+  if (beginIdx !== -1) {
+    for (var i = beginIdx + 1; i < lines.length; i++) {
+      if (lines[i].indexOf(END) !== -1) {
+        endIdx = i
+        break
+      }
+    }
+  }
+  
+  // managed = BEGIN followed by END (not END before BEGIN, not only BEGIN)
+  var managed = beginIdx !== -1 && endIdx !== -1 && beginIdx < endIdx
   
   for (var i = 0; i < lines.length; i++) {
     var trimmed = lines[i].replace(/^\s+|\s+$/g, "")
@@ -41,8 +47,8 @@ function state(text) {
       continue
     }
     
-    // Skip lines inside managed block
-    if (managed && beginIdx !== -1 && endIdx !== -1 && i >= beginIdx && i <= endIdx) {
+    // Skip lines inside managed block (only when validated)
+    if (managed && i >= beginIdx && i <= endIdx) {
       continue
     }
     
@@ -130,18 +136,33 @@ function stripBlock(text) {
   for (var i = 0; i < lines.length; i++) {
     if (lines[i].indexOf(BEGIN) !== -1) {
       beginIdx = i
-    }
-    if (lines[i].indexOf(END) !== -1) {
-      endIdx = i
+      break
     }
   }
   
-  if (beginIdx === -1 || endIdx === -1) {
+  if (beginIdx !== -1) {
+    for (var i = beginIdx + 1; i < lines.length; i++) {
+      if (lines[i].indexOf(END) !== -1) {
+        endIdx = i
+        break
+      }
+    }
+  }
+  
+  if (beginIdx === -1 || endIdx === -1 || beginIdx >= endIdx) {
     return text
   }
   
-  // Remove block and the blank line before it
-  var before = lines.slice(0, Math.max(0, beginIdx - 1))
+  // Check if line before BEGIN is blank
+  var lineBeforeIdx = beginIdx - 1
+  var shouldDropLineBefore = false
+  if (lineBeforeIdx >= 0) {
+    var lineBefore = lines[lineBeforeIdx].replace(/^\s+|\s+$/g, "")
+    shouldDropLineBefore = lineBefore === ""
+  }
+  
+  // Remove block and the blank line before it (only if blank)
+  var before = shouldDropLineBefore ? lines.slice(0, lineBeforeIdx) : lines.slice(0, beginIdx)
   var after = lines.slice(endIdx + 1)
   
   var result = before.concat(after).join(lineEnding)

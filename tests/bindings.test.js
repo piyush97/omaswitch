@@ -18,4 +18,22 @@ test("Bindings text logic", () => {
   assert.equal(Bindings.needsSetup("-- piyush.omaswitch\n"), true)
   assert.deepEqual(Bindings.newErrors("old error\n", "old error\nnew error\n"), ["new error"])
   assert.deepEqual(Bindings.newErrors("", "\n"), [])
+
+  // Fix round 1: END-before-BEGIN is not managed
+  const wrongOrder = "some content\n" + Bindings.END + "\n" + Bindings.BEGIN + "\nmore\n"
+  assert.equal(Bindings.state(wrongOrder).managed, false, "END before BEGIN should not be managed")
+  assert.equal(Bindings.stripBlock(wrongOrder), wrongOrder, "stripBlock should return unchanged when END before BEGIN")
+
+  // Fix round 1: only-BEGIN is not managed
+  const onlyBegin = "some content\n" + Bindings.BEGIN + "\nmore\n"
+  assert.equal(Bindings.state(onlyBegin).managed, false, "only BEGIN should not be managed")
+  assert.equal(Bindings.stripBlock(onlyBegin), onlyBegin, "stripBlock should return unchanged when only BEGIN")
+
+  // Fix round 1: non-blank user line above block survives stripBlock
+  const userLine = "user code here\n"
+  const withUserLine = userLine + "\n" + Bindings.block() + "\n"
+  assert.equal(Bindings.state(withUserLine).managed, true, "block with user line should be managed")
+  const stripped = Bindings.stripBlock(withUserLine)
+  assert.ok(stripped.includes("user code here"), "stripBlock should preserve non-blank user line")
+  assert.equal(stripped, userLine, "stripBlock should only remove block and blank line")
 })
