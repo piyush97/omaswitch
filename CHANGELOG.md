@@ -2,6 +2,12 @@
 
 All notable changes to OmaSwitch. Versions match `manifest.json` and the [GitHub releases](https://github.com/piyush97/omaswitch/releases).
 
+## [1.3.2] — 2026-11-21
+
+### Fixed
+- Closed apps (for example Spotify) no longer linger in the switcher. Quickshell can keep toplevels it recreated from late title or focus events; the switcher now skips windows with no workspace. ([#13](https://github.com/piyush97/omaswitch/issues/13))
+- On Omarchy 4.5, the selected window now comes to the front in floating layouts. Focus is followed by `alter_zorder` top, since Lua `hl.dsp.focus` moves focus without raising. ([#14](https://github.com/piyush97/omaswitch/issues/14))
+
 ## [1.3.1] — 2026-10-06
 
 ### Fixed
@@ -41,6 +47,8 @@ All notable changes to OmaSwitch. Versions match `manifest.json` and the [GitHub
 ### Documentation
 - Clarified that installing does not replace Omarchy's default `Alt+Tab` bindings.
 
+[1.3.2]: https://github.com/piyush97/omaswitch/releases/tag/v1.3.2
+[1.3.1]: https://github.com/piyush97/omaswitch/releases/tag/v1.3.1
 [1.3.0]: https://github.com/piyush97/omaswitch/releases/tag/v1.3.0
 [1.2.0]: https://github.com/piyush97/omaswitch/releases/tag/v1.2.0
 [1.1.2]: https://github.com/piyush97/omaswitch/releases/tag/v1.1.2
