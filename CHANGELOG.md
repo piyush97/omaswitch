@@ -2,6 +2,12 @@
 
 All notable changes to OmaSwitch. Versions match `manifest.json` and the [GitHub releases](https://github.com/piyush97/omaswitch/releases).
 
+## [1.3.3] — 2026-11-21
+
+### Fixed
+- Search highlights in the preview now stay on the matched word when the window text contains letters that grow when lowercased, such as the Turkish dotted capital I (`İ`). Previously the box could drift onto the next word or disappear. ([#19](https://github.com/piyush97/omaswitch/pull/19))
+- Long window titles and details that are cut off at an emoji no longer end in a broken replacement glyph; the whole emoji is dropped instead. ([#20](https://github.com/piyush97/omaswitch/pull/20))
+
 ## [1.3.2] — 2026-11-21
 
 ### Fixed
@@ -47,6 +53,7 @@ All notable changes to OmaSwitch. Versions match `manifest.json` and the [GitHub
 ### Documentation
 - Clarified that installing does not replace Omarchy's default `Alt+Tab` bindings.
 
+[1.3.3]: https://github.com/piyush97/omaswitch/releases/tag/v1.3.3
 [1.3.2]: https://github.com/piyush97/omaswitch/releases/tag/v1.3.2
 [1.3.1]: https://github.com/piyush97/omaswitch/releases/tag/v1.3.1
 [1.3.0]: https://github.com/piyush97/omaswitch/releases/tag/v1.3.0
