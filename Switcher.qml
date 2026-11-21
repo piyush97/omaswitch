@@ -419,7 +419,7 @@ Item {
   }
 
   function refresh() {
-    allWindows = Model.sortedWindows(Hyprland.toplevels.values, root.mruAddresses).map(Model.windowSnapshot)
+    allWindows = Model.sortedWindows(Model.managedWindows(Hyprland.toplevels.values), root.mruAddresses).map(Model.windowSnapshot)
     rebuildRows()
   }
 

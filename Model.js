@@ -138,6 +138,15 @@ function addressesByHistory(clients) {
   return result
 }
 
+// Quickshell creates a toplevel for any title/focus/urgent event naming an
+// unknown address and only drops it on `closewindow`, so windows that never
+// got `openwindow` (or events racing a close) linger as workspace-less ghosts.
+// Every window Hyprland actually manages has a workspace.
+function managedWindows(values) {
+  var source = values && typeof values.filter === "function" ? values : []
+  return source.filter(function(window) { return !!(window && window.workspace) })
+}
+
 // Accept a caller-supplied rank function or authoritative MRU addresses.
 function sortedWindows(values, rankFn) {
   var source = values && typeof values.slice === "function" ? values.slice() : []
@@ -264,6 +273,7 @@ if (typeof module !== "undefined") module.exports = {
   isCurrent: isCurrent,
   historyRank: historyRank,
   normalizeAddress: normalizeAddress,
+  managedWindows: managedWindows,
   sortedWindows: sortedWindows,
   filteredWindows: filteredWindows,
   focusCommand: focusCommand

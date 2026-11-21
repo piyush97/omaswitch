@@ -10,6 +10,11 @@ assert.equal(Model.isCurrent(active), true)
 assert.equal(Model.isCurrent({ activated: false, lastIpcObject: { focusHistoryID: 0 } }), true)
 assert.deepEqual(Model.filteredWindows([active, previous, old], "foot"), [previous])
 assert.deepEqual(Model.filteredWindows([active, previous, old], "notes"), [old])
+// Quickshell leaks title-only toplevels (no class, no workspace) after apps close (#13).
+const ghost = { address: "0xdead", title: "Spotify", activated: false, workspace: null, lastIpcObject: {} }
+assert.deepEqual(Model.managedWindows([active, ghost, previous, undefined]), [active, previous],
+  "workspace-less toplevels are not windows Hyprland manages")
+assert.deepEqual(Model.managedWindows(null), [])
 const visualOnly = { address: "0xabc", title: "Terminal", lastIpcObject: { class: "kitty" } }
 assert.deepEqual(Model.filteredWindows([visualOnly], "ERR_404_DATABASE"), [])
 assert.deepEqual(
@@ -104,6 +109,8 @@ const fs = require("node:fs")
 const vm = require("node:vm")
 const qml = fs.readFileSync(__dirname + "/Switcher.qml", "utf8")
 assert.match(qml, /\.map\(Model\.windowSnapshot\)/, "ListView rows must use scalar snapshots")
+assert.match(qml, /function refresh\(\) \{\s*allWindows = Model\.sortedWindows\(Model\.managedWindows\(Hyprland\.toplevels\.values\)/,
+  "rows must skip stale workspace-less toplevels")
 assert.match(qml, /onObjectRemovedPre\(window\)[\s\S]*?previewSourceA === source[\s\S]*?previewSourceB === source[\s\S]*?resetPreview\(\)/,
   "capture sources must clear before any retained toplevel is destroyed")
 assert.match(qml, /function close\(\)[\s\S]*?root\.rows = \[\][\s\S]*?root\.allWindows = \[\]/,
