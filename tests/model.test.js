@@ -141,6 +141,7 @@ assert.equal(Model.focusCommand({ address: "abc'; touch /tmp/pwned; '" }), null,
 const fs = require("node:fs")
 const vm = require("node:vm")
 const qml = fs.readFileSync(__dirname + "/../Switcher.qml", "utf8")
+const ocrIndexer = fs.readFileSync(__dirname + "/../services/OcrIndexer.qml", "utf8")
 assert.match(qml, /\.map\(Model\.windowSnapshot\)/, "ListView rows must use scalar snapshots")
 assert.match(qml, /function refresh\(\) \{\s*allWindows = Model\.sortedWindows\(Model\.managedWindows\(Hyprland\.toplevels\.values\)/,
   "rows must skip stale workspace-less toplevels")
@@ -148,27 +149,27 @@ assert.match(qml, /onObjectRemovedPre\(window\)[\s\S]*?previewSourceA === source
   "capture sources must clear before any retained toplevel is destroyed")
 assert.match(qml, /function close\(\)[\s\S]*?root\.rows = \[\][\s\S]*?root\.allWindows = \[\]/,
   "closing the overlay must release all row snapshots")
-assert.match(qml, /filterText\.trim\(\)\.length >= 3[\s\S]*?beginOcrIndex\(\)/,
+assert.match(ocrIndexer, /query\.trim\(\)\.length >= 3[\s\S]*?beginOcrIndex\(\)/,
   "OCR must remain lazy until a meaningful search query exists")
 assert.ok(
-  qml.includes('"timeout", "8s", "tesseract", path, "stdout"') &&
-  qml.includes('"--dpi", "150", "tsv"]') &&
-  qml.includes('Quickshell.execDetached(["rm", "-f", path])'),
+  ocrIndexer.includes('"timeout", "8s", "tesseract", path, "stdout"') &&
+  ocrIndexer.includes('"--dpi", "150", "tsv"]') &&
+  ocrIndexer.includes('Quickshell.execDetached(["rm", "-f", path])'),
   "OCR must invoke local tesseract without a shell and delete its temporary capture"
 )
-assert.match(qml, /\^\[A-Za-z0-9_\+\-\]\+\$[\s\S]*?languages = "eng"/,
+assert.match(ocrIndexer, /\^\[A-Za-z0-9_\+\-\]\+\$[\s\S]*?languages = "eng"/,
   "OCR language configuration must be validated before reaching a process")
-assert.match(qml, /runtimeDir[\s\S]*?\(\^\|\\\/\)\\\.\\\.\(\\\/\|\$\)/,
+assert.match(ocrIndexer, /runtimeDir[\s\S]*?\(\^\|\\\/\)\\\.\\\.\(\\\/\|\$\)/,
   "OCR must reject unsafe runtime directory traversal")
-assert.match(qml, /function resetOcr\(\)[\s\S]*?ocrTextByAddress = \(\{\}\)/,
+assert.match(ocrIndexer, /function reset\(\)[\s\S]*?ocrTextByAddress = \(\{\}\)/,
   "OCR text must remain session-only and clear when the overlay closes")
-assert.match(qml, /omaswitch-ocr-" \+[\s\S]*?Date\.now\(\)[\s\S]*?Math\.random\(\)/,
+assert.match(ocrIndexer, /omaswitch-ocr-" \+[\s\S]*?Date\.now\(\)[\s\S]*?Math\.random\(\)/,
   "each OCR capture must use a unique runtime-directory path")
-assert.match(qml, /property int generation: -1[\s\S]*?property bool streamDone: false[\s\S]*?property bool exitedDone: false[\s\S]*?property bool active: false/,
+assert.match(ocrIndexer, /property int generation: -1[\s\S]*?property bool streamDone: false[\s\S]*?property bool exitedDone: false[\s\S]*?property bool active: false/,
   "OCR process reuse must wait for an immutable generation and both exit signals")
-assert.match(qml, /function onObjectRemovedPre\(window\) \{[\s\S]*?root\.resetOcr\(\)/,
+assert.match(qml, /function onObjectRemovedPre\(window\) \{[\s\S]*?ocrIndexer\.reset\(\)/,
   "window topology changes must clear cached OCR text before an address can be reused")
-const grabHandler = qml.match(/^  function grabOcrFrame\(\) \{[\s\S]*?^  \}/m)
+const grabHandler = ocrIndexer.match(/^  function grabOcrFrame\(\) \{[\s\S]*?^  \}/m)
 assert.ok(grabHandler)
 const captureContext = vm.createContext({
   Qt: { size: function(width, height) { return { width, height } } },
