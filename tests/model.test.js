@@ -1,5 +1,5 @@
 const assert = require("node:assert/strict")
-const Model = require("./Model.js")
+const Model = require("../Model.js")
 
 const active = { title: "Browser", activated: true, wayland: { appId: "chromium" }, workspace: { id: 1 }, lastIpcObject: { focusHistoryID: 0 } }
 const previous = { title: "Terminal", activated: false, wayland: { appId: "foot" }, workspace: { id: 2 }, lastIpcObject: { focusHistoryID: 1 } }
@@ -140,7 +140,7 @@ assert.equal(Model.focusCommand({ address: "abc'; touch /tmp/pwned; '" }), null,
 // Exercise the shipped QML capture handlers without a compositor or timing luck.
 const fs = require("node:fs")
 const vm = require("node:vm")
-const qml = fs.readFileSync(__dirname + "/Switcher.qml", "utf8")
+const qml = fs.readFileSync(__dirname + "/../Switcher.qml", "utf8")
 assert.match(qml, /\.map\(Model\.windowSnapshot\)/, "ListView rows must use scalar snapshots")
 assert.match(qml, /function refresh\(\) \{\s*allWindows = Model\.sortedWindows\(Model\.managedWindows\(Hyprland\.toplevels\.values\)/,
   "rows must skip stale workspace-less toplevels")
