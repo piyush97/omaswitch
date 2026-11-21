@@ -451,10 +451,10 @@ assert.equal(Model.appCycleIndex(rows, 1, 1), 2) // w1a at index 1, next same ap
 assert.equal(Model.appCycleIndex(soloRows, 0, 1), 0)
 
 // titleMatch
-assert.deepEqual(Model.titleMatch({ title: "GitHub Pull Requests" }, "hub"), { match: "Hub", original: "GitHub Pull Requests" })
+assert.deepEqual(Model.titleMatch({ title: "GitHub - Pull" }, "hub"), { before: "Git", match: "Hub", after: " - Pull" })
 assert.equal(Model.titleMatch({ title: "x" }, ""), null)
 
 // moveHereLua and closeTarget
-assert.match(Model.moveHereLua({ address: "0xabc", workspace: { id: 3 } }, 1), /hl\.dsp\.window\.move\(\{ workspace: '1', silent: false, window: 'address:0xabc' \}\)/)
+assert.match(Model.moveHereLua({ address: "0xabc", workspace: { id: 3 } }, 1), /hl\.dsp\.window\.move\(\{ workspace = '1', follow = false, window = 'address:0xabc' \}\)/)
 assert.equal(Model.moveHereLua({ address: "0xabc", workspace: { id: 1 } }, 1), null)
 assert.equal(Model.closeTarget({}), null)

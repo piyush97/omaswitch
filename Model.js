@@ -293,15 +293,19 @@ function scopedWindows(windows, scope, ctx) {
   return source
 }
 
-// Match case-insensitive query in label(window), returning { match, original } or null.
+// Match case-insensitive query in label(window), returning { before, match, after } or null.
+// Uses same Unicode-safe lowercasing as matchSnippet/ocrHighlights so indices map to original.
 function titleMatch(window, query) {
   var q = String(query || "").trim().toLowerCase()
   if (!q) return null
   var title = label(window)
   var idx = title.toLowerCase().indexOf(q)
   if (idx === -1) return null
-  var match = title.substring(idx, idx + q.length)
-  return { match: match, original: title }
+  return {
+    before: title.substring(0, idx),
+    match: title.substring(idx, idx + q.length),
+    after: title.substring(idx + q.length)
+  }
 }
 
 // Build rows for display: headers (kind: "header", workspaceId, label) and windows
@@ -514,7 +518,7 @@ function moveHereLua(window, workspaceId) {
   if (!address || !/^0x[0-9a-fA-F]+$/.test(address)) return null
   var currentWs = window && window.workspace && window.workspace.id
   if (currentWs === workspaceId) return null
-  return "hl.dsp.window.move({ workspace: '" + workspaceId + "', silent: false, window: 'address:" + address + "' })"
+  return "(function() hl.dispatch(hl.dsp.window.move({ workspace = '" + workspaceId + "', follow = false, window = 'address:" + address + "' })) end)"
 }
 
 // Return normalized address for closewindow, or null.
