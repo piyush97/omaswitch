@@ -91,15 +91,34 @@ assert.equal(Model.desktopEntryForWindow({ wayland: { appId: "unknown-app" } }, 
 // workspace-switching command.
 const target = { title: "Browser", address: "55ea685ceda0", workspace: { id: 5 } }
 const targetHex = { title: "Browser", address: "0x55ea685ceda0", workspace: { id: 5 } }
-const expected = "hyprctl dispatch \"hl.dsp.focus({ window = 'address:0x55ea685ceda0' })\" >/dev/null 2>&1 || hyprctl dispatch focuswindow \"address:0x55ea685ceda0\""
+const expected = "if hyprctl dispatch \"hl.dsp.focus({ window = 'address:0x55ea685ceda0' })\" >/dev/null 2>&1; then " +
+  "hyprctl dispatch \"hl.dsp.window.alter_zorder({ mode = 'top', window = 'address:0x55ea685ceda0' })\"; " +
+  "else hyprctl dispatch focuswindow \"address:0x55ea685ceda0\"; fi"
 
 assert.ok(Model.focusCommand(target), "window with address must produce a dispatch command")
 assert.equal(Model.focusCommand(target), expected, "address must be normalized with 0x prefix")
 assert.equal(Model.focusCommand(targetHex), expected, "existing 0x prefix must be preserved")
-assert.ok(Model.focusCommand(target).startsWith("hyprctl dispatch \"hl.dsp.focus("),
-  "primary dispatch must be the workspace-switching hl.dsp.focus form")
-assert.ok(Model.focusCommand(target).includes("|| hyprctl dispatch focuswindow \"address:0x55ea685ceda0\""),
-  "plain focuswindow must remain as the stock-Hyprland fallback")
+// Run the command against a fake hyprctl: Lua focus must be followed by a
+// raise (floating windows stay behind otherwise, #14); without Lua, fall back.
+const focusCalls = (luaWorks) => {
+  const nodeFs = require("node:fs")
+  const dir = nodeFs.mkdtempSync(require("node:os").tmpdir() + "/omaswitch-")
+  nodeFs.writeFileSync(dir + "/hyprctl", "#!/bin/sh\necho \"$*\" >> \"$LOG\"\n" +
+    (luaWorks ? "exit 0\n" : "case \"$*\" in *hl.dsp*) exit 1;; esac\n"), { mode: 0o755 })
+  require("node:child_process").execFileSync("sh", ["-c", Model.focusCommand(target)],
+    { env: { PATH: dir + ":/usr/bin:/bin", LOG: dir + "/log" } })
+  const calls = nodeFs.readFileSync(dir + "/log", "utf8").trim().split("\n")
+  nodeFs.rmSync(dir, { recursive: true })
+  return calls
+}
+assert.deepEqual(focusCalls(true), [
+  "dispatch hl.dsp.focus({ window = 'address:0x55ea685ceda0' })",
+  "dispatch hl.dsp.window.alter_zorder({ mode = 'top', window = 'address:0x55ea685ceda0' })"
+], "Lua focus must raise the focused window")
+assert.deepEqual(focusCalls(false), [
+  "dispatch hl.dsp.focus({ window = 'address:0x55ea685ceda0' })",
+  "dispatch focuswindow address:0x55ea685ceda0"
+], "plain focuswindow must remain as the stock-Hyprland fallback")
 assert.equal(Model.focusCommand({}), null, "no address cannot produce a focus command")
 assert.equal(Model.focusCommand(null), null, "no window cannot produce a focus command")
 assert.equal(Model.focusCommand({ address: "abc'; touch /tmp/pwned; '" }), null,

@@ -249,12 +249,16 @@ function ocrHighlights(window, query, ocrByAddress) {
 // Native toplevel activate does not always switch the visible workspace, so
 // the switch is requested explicitly: prefer Omarchy's Lua dispatcher form
 // (hl.dsp.focus), fall back to the plain focuswindow syntax for stock
-// Hyprland. Returns null when the compositor has not reported an address yet.
+// Hyprland. Lua hl.dsp.focus does not raise, so a floating window could gain
+// focus while staying behind others; raise it as a click would.
+// Returns null when the compositor has not reported an address yet.
 function focusCommand(window) {
   var address = normalizeAddress(window && window.address)
   if (!address) return null
-  return "hyprctl dispatch \"hl.dsp.focus({ window = 'address:" + address +
-    "' })\" >/dev/null 2>&1 || hyprctl dispatch focuswindow \"address:" + address + "\""
+  var selector = "window = 'address:" + address + "'"
+  return "if hyprctl dispatch \"hl.dsp.focus({ " + selector + " })\" >/dev/null 2>&1; then " +
+    "hyprctl dispatch \"hl.dsp.window.alter_zorder({ mode = 'top', " + selector + " })\"; " +
+    "else hyprctl dispatch focuswindow \"address:" + address + "\"; fi"
 }
 
 if (typeof module !== "undefined") module.exports = {
