@@ -400,3 +400,61 @@ for (var replayIndex = replayed.length - 1; replayIndex >= 0; replayIndex--)
   seededMru = Model.promoteAddress(seededMru, replayed[replayIndex])
 assert.deepEqual(seededMru, ["ddd", "eee", "aaa", "bbb", "ccc"])
 console.log("Model checks passed")
+
+// --- Task 3: scopedWindows, titleMatch, displayRows, windowRowIndex, stepWindowRow, clampSelection, matchSnippet, appCycleIndex, closeTarget, moveHereLua ---
+
+const a1 = { address: "0xa1", title: "App A", workspace: { id: 1 }, monitor: { name: "DP-1" }, wayland: { appId: "app-a" } }
+const b2 = { address: "0xb2", title: "App B", workspace: { id: 2 }, monitor: { name: "HDMI-A-1" }, wayland: { appId: "app-b" } }
+const w1a = { address: "0xw1a", title: "Window 1A", workspace: { id: 1 }, wayland: { appId: "shared-app" } }
+const w2a = { address: "0xw2a", title: "Window 2A", workspace: { id: 2 }, wayland: { appId: "different-app" } }
+const w1b = { address: "0xw1b", title: "Window 1B", workspace: { id: 1 }, wayland: { appId: "shared-app" } }
+const tenWindows = Array.from({ length: 10 }, (_, i) => ({
+  address: "0xten" + i,
+  title: "Window " + i,
+  workspace: { id: 1 },
+  wayland: { appId: "app" + i }
+}))
+const soloRows = Model.displayRows([w1a], { group: false })
+
+// scopedWindows
+assert.deepEqual(Model.scopedWindows([a1, b2], "workspace", { workspaceId: 2 }), [b2])
+assert.deepEqual(Model.scopedWindows([a1, b2], "monitor", { monitorName: "DP-1" }), [a1])
+assert.deepEqual(Model.scopedWindows([a1, b2], "all", {}), [a1, b2])
+
+// displayRows and jump numbers
+const rows = Model.displayRows([w1a, w2a, w1b], { group: true })
+assert.deepEqual(rows.map(r => r.kind), ["header", "window", "window", "header", "window"])
+assert.deepEqual(rows.filter(r => r.kind === "window").map(r => r.jump), [1, 2, 3])
+assert.equal(rows[2].window, w1b)
+assert.deepEqual(Model.displayRows([w1a, w2a], { group: false }).map(r => r.kind), ["window", "window"])
+assert.equal(Model.displayRows(tenWindows, { group: false })[9].jump, null)
+
+// windowRowIndex, stepWindowRow, clampSelection
+assert.equal(Model.windowRowIndex(rows, 3), 4)
+assert.equal(Model.stepWindowRow(rows, 2, 1), 4)
+assert.equal(Model.stepWindowRow(rows, 4, 1), 1)
+assert.equal(Model.clampSelection(rows, 9), 4)
+assert.equal(Model.clampSelection([], 0), -1)
+
+// matchSnippet
+const ocr = { abc: "Build log\n  npm ERR! code ERR_404_DATABASE while fetching 🙂 more text here" }
+assert.deepEqual(Model.matchSnippet(visualOnly, "err_404", ocr, 80).match, "ERR_404")
+assert.equal(Model.matchSnippet(active, "browser", ocr, 80), null)
+const longSnippet = Model.matchSnippet(visualOnly, "fetching", { abc: "x".repeat(300) + " fetching " + "🙂".repeat(100) }, 40)
+assert.ok((longSnippet.before + longSnippet.match + longSnippet.after).length <= 40)
+assert.ok(!/[\uD800-\uDBFF]$/.test(longSnippet.before))
+assert.ok(!/[\uD800-\uDBFF]$/.test(longSnippet.match))
+assert.ok(!/^[\uDC00-\uDFFF]/.test(longSnippet.after))
+
+// appCycleIndex
+assert.equal(Model.appCycleIndex(rows, 1, 1), 2) // w1a at index 1, next same app is w1b at index 2 (window row)
+assert.equal(Model.appCycleIndex(soloRows, 0, 1), 0)
+
+// titleMatch
+assert.deepEqual(Model.titleMatch({ title: "GitHub Pull Requests" }, "hub"), { match: "Hub", original: "GitHub Pull Requests" })
+assert.equal(Model.titleMatch({ title: "x" }, ""), null)
+
+// moveHereLua and closeTarget
+assert.match(Model.moveHereLua({ address: "0xabc", workspace: { id: 3 } }, 1), /hl\.dsp\.window\.move\(\{ workspace: '1', silent: false, window: 'address:0xabc' \}\)/)
+assert.equal(Model.moveHereLua({ address: "0xabc", workspace: { id: 1 } }, 1), null)
+assert.equal(Model.closeTarget({}), null)
