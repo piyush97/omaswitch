@@ -81,7 +81,9 @@ Layout options: (1) list left with large live preview right, (2) preview on top 
 - List column about 40% width, preview fills the rest, as in v1.
 - Row: app icon, app name, title (elided), jump number 1 to 9 for the first nine rows in display order.
 - When the row matched through OCR, a second line shows the matched line, trimmed around the match, with the match highlighted. Metadata matches highlight inside the title.
-- Workspace header rows when grouping is on. Groups follow MRU order of their most recent window; inside a group, MRU order.
+- Workspace header rows when grouping is on, in picker mode only. Groups follow MRU order of their most recent window; inside a group, MRU order.
+- Cycle mode (Alt held) always shows a flat MRU list with no headers, so one `Alt+Tab` lands on the row directly below the current window and the selection never jumps between groups. Grouping only applies once the picker is open for searching.
+- Jump numbers 1 to 9 always count on-screen row order (header rows skipped), so the number shown is the number pressed.
 - Footer hint line lists the active keys. Hidden in cycle mode (Alt held) to stay quiet.
 - Empty state: "No windows" when nothing is open; "No match for "<query>"" plus "Searching window contents…" while OCR runs.
 - Opens on the monitor that has keyboard focus.
@@ -92,7 +94,7 @@ Layout options: (1) list left with large live preview right, (2) preview on top 
 |---|---|---|
 | Cycle (Alt held) | `Tab` / `Shift+Tab` | Next / previous in MRU (unchanged) |
 | Cycle | release `Alt` | Switch to selected (unchanged) |
-| Cycle | `` ` `` while Alt held | Next window of the selected row's app |
+| Cycle | `` ` `` while Alt held (the `ALT + GRAVE` binding) | Next window of the selected row's app |
 | Cycle | `1`-`9` while Alt held | Switch to that row now |
 | Picker | type | Filter; OCR search starts at 3 characters (unchanged) |
 | Picker | `Alt+1`-`Alt+9` | Switch to that row |
@@ -102,7 +104,12 @@ Layout options: (1) list left with large live preview right, (2) preview on top 
 | Both | `Escape` | Close overlay, or leave settings view |
 | Both | `Enter` / click | Switch |
 
-New optional binding for same-app cycling: `summon piyush.omaswitch '{"mode":"cycle","scope":"app","direction":1}'`, suggested on `ALT + GRAVE`.
+Same-app cycling runs through the summon payload `summon piyush.omaswitch '{"mode":"cycle","scope":"app","direction":1}'`, bound to `ALT + GRAVE`. Hyprland handles that key before the overlay sees it, so the logic lives in the summon handler (as v1 already does for a repeat summon while open), not in `Keys.onPressed`:
+
+- Overlay closed: open in cycle mode listing only windows of the focused window's app, selection on the second one.
+- Overlay open: move to the next window of the selected row's app.
+
+`1`-`9` and `Alt+1`-`Alt+9` are handled in `Keys.onPressed`. If the user has bound those chords in Hyprland, Hyprland wins; the README says so. Omarchy's default bindings use `SUPER` plus digits for workspaces, so `Alt` plus digits is normally free.
 
 After `Ctrl+W`, the row stays (dimmed) until Hyprland reports the window gone, so an app that shows a save prompt does not leave a missing row.
 
@@ -126,10 +133,13 @@ Invalid or missing values fall back to defaults and never overwrite the file.
 2. On click:
    1. Copy `bindings.lua` to `bindings.lua.omaswitch-<timestamp>.bak`.
    2. Append a marked block (`-- OmaSwitch begin` / `-- OmaSwitch end`) with the unbinds and binds from the README.
-   3. Run `hyprctl reload`, then `hyprctl configerrors`.
-   4. If errors appear, restore the backup, reload again, and show the error text with a link to the README steps.
+   3. Record `hyprctl configerrors` before the change. Run `hyprctl reload`, then `hyprctl configerrors` again.
+   4. Restore only if the new error output contains lines that were not there before. Pre-existing errors elsewhere in the user's config do not block setup. On restore: put the backup back, reload again, and show the new error lines with a link to the README steps.
 3. "Not now" sets `setupDismissed`. The settings view keeps a "Set up Alt+Tab" button.
 4. If `bindings.lua` does not exist, show the README command instead of the button.
+5. The block contains: `hl.unbind` for `ALT + TAB`, `ALT + SHIFT + TAB`, and `ALT + GRAVE`, then `o.bind` for all three (forward cycle, reverse cycle, same-app cycle).
+6. Users who added v1 bindings by hand (a `piyush.omaswitch` summon outside the marked block) count as set up; no banner. If they have no `"scope":"app"` binding, the settings view shows the one line to add, with a copy button. Their hand-written lines are never edited.
+7. The settings view has "Remove OmaSwitch bindings" when the marked block exists: it takes a fresh backup, strips the block, reloads, and runs the same error check. A plugin cannot run code on uninstall, so the README uninstall steps tell users to press this first or delete the block by hand.
 
 The text transforms (detect existing binding, build block, strip block) are pure functions in `Bindings.js` with node tests.
 
@@ -162,7 +172,9 @@ Behavior from v1 that must survive: MRU history, stale toplevel filtering (#13),
 
 Decided by owner: approach A, layout 1, goals adoption plus portfolio.
 
-Decided in this doc (owner can override at approval): key map above, settings list, setup flow with backup and auto-restore, file structure, `ALT + GRAVE` suggestion.
+Decided in this doc (owner can override at approval): key map above, settings list, setup flow with backup and auto-restore, file structure, `ALT + GRAVE` for same-app cycling.
+
+Settled after the builder check (2026-11-21): cycle mode is flat MRU and grouping applies to the picker only; jump numbers follow on-screen order; same-app cycling is handled by the summon handler; setup restores only on new config errors; the block includes `ALT + GRAVE`; hand-written v1 bindings are left alone; settings offers removal of the block. v2 work starts from `v1.3.3` (`89d681a`).
 
 Left to the builder:
 - Exact spacing, row height, icon size, and snippet length, within the theme's `Style` scale.
