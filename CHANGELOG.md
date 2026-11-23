@@ -2,11 +2,11 @@
 
 All notable changes to OmaSwitch. Versions match `manifest.json` and the [GitHub releases](https://github.com/piyush97/omaswitch/releases).
 
-## [2.0.0]
+## [2.0.0] — 2026-11-23
 
 ### Added
 
-- Omit windows from the switcher by app/class or title pattern, configured in `~/.config/omarchy/omaswitch-omit.json` (`omit` or `exclude` arrays) and reloaded live. ([#23](https://github.com/piyush97/omaswitch/issues/23))
+- Omit windows from the switcher by app/class or title pattern, configured in `~/.config/omarchy/omaswitch-omit.json` (`omit` or `exclude` arrays) and reloaded live. ([#23](https://github.com/piyush97/omaswitch/issues/23), [#24](https://github.com/piyush97/omaswitch/pull/24))
 - Workspace groups, numbered results, and highlighted content snippets in the picker.
 - Same-app cycling with `Alt+Grave`, close with `Ctrl+W`, and move to the focused workspace with `Ctrl+M`.
 - Settings for window scope, grouping, live previews, and content search.
@@ -16,6 +16,16 @@ All notable changes to OmaSwitch. Versions match `manifest.json` and the [GitHub
 
 - Open the switcher on the focused monitor.
 - Split picker UI and capture services into separate components, with regression tests for window selection and binding updates.
+- The switcher opens faster: it no longer rescans the whole icon theme on every open. ([#27](https://github.com/piyush97/omaswitch/pull/27))
+- Settings and the setup banner use Omarchy's themed controls, with a visible focus border for keyboard users. ([#29](https://github.com/piyush97/omaswitch/pull/29))
+
+### Fixed
+
+- The picker follows the theme on Qt 6.12 (Omarchy 4.5) instead of drawing an unthemed white card. ([#26](https://github.com/piyush97/omaswitch/pull/26))
+- Content search finds text in windows on fractionally scaled (for example 1.5x) monitors, and OCR runs faster there. ([#28](https://github.com/piyush97/omaswitch/pull/28))
+- Typing a plain `i` finds the dotted capital `İ` in titles and window text. ([#28](https://github.com/piyush97/omaswitch/pull/28))
+- Settings copies the `ALT + GRAVE` bind line for same-app cycling instead of an unbind line. ([#28](https://github.com/piyush97/omaswitch/pull/28))
+- A binding rollback error clears once `bindings.lua` changes or is removed. ([#28](https://github.com/piyush97/omaswitch/pull/28))
 
 ## [1.3.3] — 2026-11-21
 
@@ -68,6 +78,7 @@ All notable changes to OmaSwitch. Versions match `manifest.json` and the [GitHub
 ### Documentation
 - Clarified that installing does not replace Omarchy's default `Alt+Tab` bindings.
 
+[2.0.0]: https://github.com/piyush97/omaswitch/releases/tag/v2.0.0
 [1.3.3]: https://github.com/piyush97/omaswitch/releases/tag/v1.3.3
 [1.3.2]: https://github.com/piyush97/omaswitch/releases/tag/v1.3.2
 [1.3.1]: https://github.com/piyush97/omaswitch/releases/tag/v1.3.1
