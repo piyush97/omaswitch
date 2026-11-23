@@ -41,3 +41,28 @@ test("Bindings text logic", () => {
   assert.ok(stripped.includes("user code here"), "stripBlock should preserve non-blank user line")
   assert.equal(stripped, userLine, "stripBlock should only remove block and blank line")
 })
+
+test("same-app copy line binds Alt+Grave instead of unbinding it", () => {
+  const line = Bindings.appScopeLine()
+  assert.match(line, /^o\.bind\("ALT \+ GRAVE"/, "the copied line must add the binding")
+  assert.match(line, /\\"scope\\":\\"app\\"/, "the copied line must summon same-app cycling")
+})
+
+test("a rollback error clears once bindings.lua changes or disappears", () => {
+  const fs = require("node:fs")
+  const vm = require("node:vm")
+  const qml = fs.readFileSync(__dirname + "/../services/BindingsSetup.qml", "utf8")
+  const loaded = qml.match(/onLoaded: \{([\s\S]*?)^    \}/m)
+  const failed = qml.match(/onLoadFailed: \{([^}]*)\}/)
+  assert.ok(loaded && failed)
+  const run = (body, root, text) => vm.runInNewContext(body, { root, text: () => text })
+  const root = { original: "before", error: "Hyprland rejected the new bindings", missing: false }
+  run(loaded[1], root, "before")
+  assert.equal(root.error, "Hyprland rejected the new bindings", "restored bytes keep the rollback error")
+  run(loaded[1], root, "after")
+  assert.equal(root.error, "", "an external edit clears the stale error")
+  root.error = "Hyprland rejected the new bindings"
+  run(failed[1], root, "")
+  assert.equal(root.error, "", "a missing file clears the stale error")
+  assert.equal(root.missing, true)
+})

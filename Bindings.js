@@ -208,7 +208,7 @@ function newErrors(before, after) {
 function appScopeLine() {
   var lines = block().split("\n")
   for (var i = 0; i < lines.length; i++) {
-    if (lines[i].indexOf("ALT + GRAVE") !== -1) {
+    if (lines[i].indexOf('o.bind("ALT + GRAVE"') === 0) {
       return lines[i]
     }
   }
