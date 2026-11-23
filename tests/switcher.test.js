@@ -34,3 +34,9 @@ test('digit shortcuts focus an on-screen window rather than indexing headers', (
   assert.match(qml, /Model\.windowRowIndex\(root\.rows,/)
   assert.match(qml, /Qt\.Key_1[^]*?Qt\.Key_9/)
 })
+
+test('omit patterns are watched and applied when refreshing', () => {
+  assert.match(qml, /!Model\.excluded\(window, root\.omitPatterns\)/)
+  assert.match(qml, /omaswitch-omit\.json/)
+  assert.match(qml, /watchChanges: true[\s\S]*?onFileChanged: reload\(\)/)
+})

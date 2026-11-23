@@ -49,6 +49,7 @@ Item {
   // Scalar window snapshots + filtered rows; no QObjects in the delegate model.
   property var allWindows: []
   property var rows: []
+  property var omitPatterns: []
 
   readonly property int headerHeight: Math.max(Style.space(34), Style.font.title + Style.spacing.controlPaddingY * 2)
   readonly property int rowHeight: Math.max(Style.space(48), Style.font.body + Style.font.caption + Style.spacing.rowPaddingX * 2)
@@ -100,8 +101,37 @@ Item {
   }
 
   function refresh() {
-    allWindows = Model.sortedWindows(Model.managedWindows(Hyprland.toplevels.values), root.mruAddresses).map(Model.windowSnapshot)
+    allWindows = Model.sortedWindows(Model.managedWindows(Hyprland.toplevels.values), root.mruAddresses)
+      .filter(function(window) { return !Model.excluded(window, root.omitPatterns) })
+      .map(Model.windowSnapshot)
     rebuildRows()
+  }
+
+  // Read the omit list (an `omit` or `exclude` array of patterns) from the
+  // config file and compile each to a case-insensitive regex.
+  function reloadOmit() {
+    var patterns = []
+    try {
+      var data = JSON.parse(omitFile.text() || "{}")
+      var list = (data && data.omit && data.omit.length ? data.omit : (data.exclude || [])) || []
+      for (var i = 0; i < list.length; i++) {
+        var raw = String(list[i]).trim()
+        if (!raw) continue
+        try { patterns.push(new RegExp(raw, "i")) } catch (e) {}
+      }
+    } catch (e) {}
+    root.omitPatterns = patterns
+    if (root.opened) root.refresh()
+  }
+
+  FileView {
+    id: omitFile
+    path: Quickshell.env("HOME") + "/.config/omarchy/omaswitch-omit.json"
+    watchChanges: true
+    printErrors: false
+    onLoaded: root.reloadOmit()
+    onLoadFailed: root.omitPatterns = []
+    onFileChanged: reload()
   }
 
   function seedMru(text) {

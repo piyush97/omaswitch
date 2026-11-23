@@ -476,3 +476,17 @@ assert.match(Model.moveHereLua({ address: "0xabc", workspace: { id: 3 } }, 1), /
 assert.equal(Model.moveHereLua({ address: "0xabc", workspace: { id: 1 } }, 1), null)
 assert.equal(Model.moveHereLua({ address: "0xabc", workspace: { id: 1 } }, "not a workspace ID"), null)
 assert.equal(Model.closeTarget({}), null)
+
+// --- excluded: omit windows by app/class or title ---
+assert.equal(Model.excluded(active, []), false)
+assert.equal(Model.excluded(active, [/^chromium$/i]), true)
+assert.equal(Model.excluded(active, [/^foot$/i]), false)
+const pcloud = { title: "pCloud", wayland: { appId: "pcloud.bin" } }
+assert.equal(Model.excluded(pcloud, [/^pcloud/i]), true)
+assert.equal(Model.excluded(pcloud, [/^signal$/i]), false)
+assert.equal(Model.excluded(pcloud, [/pcloud\.bin$/i]), true)
+// A pattern matching only the title (not the appId) must still omit the window.
+assert.equal(Model.excluded({ title: "Signal", wayland: { appId: "org.signal.desktop" } }, [/^signal$/i]), true)
+// Matching is against the class too (X11 windows have no wayland appId).
+assert.equal(Model.excluded({ title: "Notes", lastIpcObject: { class: "obsidian" } }, [/^obsidian$/i]), true)
+assert.equal(Model.excluded(null, [/^chromium$/i]), false)

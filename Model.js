@@ -295,6 +295,19 @@ function scopedWindows(windows, scope, ctx) {
   return source
 }
 
+// A window is omitted from the switcher when its app/class or title matches
+// any pattern in the configured omit list (compiled case-insensitive regexes).
+function excluded(window, patterns) {
+  if (!patterns || patterns.length === 0) return false
+  var identity = appId(window)
+  var title = String(window && window.title || "")
+  for (var i = 0; i < patterns.length; i++) {
+    var re = patterns[i]
+    if (re && (re.test(identity) || re.test(title))) return true
+  }
+  return false
+}
+
 // Map the lowercase match back to complete characters in the original text.
 function splitMatch(text, query) {
   if (!query) return null
@@ -488,6 +501,7 @@ if (typeof module !== "undefined") module.exports = {
   filteredWindows: filteredWindows,
   focusCommand: focusCommand,
   scopedWindows: scopedWindows,
+  excluded: excluded,
   titleMatch: titleMatch,
   displayRows: displayRows,
   windowRowIndex: windowRowIndex,
