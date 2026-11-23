@@ -63,9 +63,14 @@ Item {
   readonly property bool previewLayout: root.opened && pluginSettings.values.livePreview && root.previewTarget !== null
 
   readonly property int cardWidth: Math.min(root.previewLayout ? Style.space(1080) : Style.space(760), panel.width - Style.gapsOut * 2)
+  readonly property bool offerSetup: !cycleMode && !settingsOpen && !helpOpen && bindingsSetup.loaded &&
+    !pluginSettings.values.setupDismissed && (bindingsSetup.state === null ||
+      (!bindingsSetup.state.managed && !bindingsSetup.state.handWritten))
+  property bool dismissedSetup: false
+  readonly property int setupHeight: offerSetup && !dismissedSetup ? setupBanner.implicitHeight + listGap : 0
   readonly property int footerHeight: cycleMode || helpOpen || settingsOpen ? 0 : Style.space(24)
   readonly property int desiredListHeight: Math.max(root.rowHeight * 2, rows.length * root.rowHeight * (filterText ? 1.35 : 1))
-  readonly property int desiredCardHeight: root.contentMargin * 2 + root.headerHeight + root.listGap + root.desiredListHeight + footerHeight
+  readonly property int desiredCardHeight: root.contentMargin * 2 + root.headerHeight + root.listGap + root.desiredListHeight + footerHeight + setupHeight
   readonly property int cardHeight: Math.min(
     Math.max(root.previewLayout || root.helpOpen || root.settingsOpen ? Style.space(400) : 0, root.desiredCardHeight),
     panel.height - Style.gapsOut * 2)
@@ -73,7 +78,7 @@ Item {
   readonly property int innerWidth: Math.max(0, card.width - root.contentMargin * 2)
   readonly property int listWidth: root.previewLayout ? Math.max(Style.space(300), Math.round(root.innerWidth * 0.40)) : root.innerWidth
   readonly property int previewWidth: root.previewLayout ? Math.max(0, root.innerWidth - root.listWidth - root.gap) : 0
-  readonly property int listHeight: Math.max(0, root.contentHeight - root.headerHeight - root.listGap - root.footerHeight - (root.footerHeight ? root.listGap : 0))
+  readonly property int listHeight: Math.max(0, root.contentHeight - root.setupHeight - root.headerHeight - root.listGap - root.footerHeight - (root.footerHeight ? root.listGap : 0))
   // Positive before the pane appears, so ScreencopyView can obtain its first
   // frame and flip hasContent without depending on a zero-sized parent.
   readonly property int previewConstraintWidth: Math.max(1, Math.min(Style.space(580), panel.width - Style.space(420)))
@@ -208,7 +213,10 @@ Item {
   function setSettingsOpen(value) {
     settingsOpen = value
     helpOpen = false
-    if (value) settingsView.focusFirst()
+    if (value) {
+      bindingsSetup.refresh()
+      settingsView.focusFirst()
+    }
     else keyCatcher.forceActiveFocus()
   }
 
@@ -243,6 +251,7 @@ Item {
     root.settingsOpen = false
     var monitorName = Hyprland.focusedMonitor?.name
     root.targetScreen = Quickshell.screens.find(screen => screen.name === monitorName) || null
+    if (!root.cycleMode) bindingsSetup.refresh()
     root.selectedIndex = -1
 
     // Build the initial model and choose the initial row before making the
@@ -377,6 +386,8 @@ Item {
     onValuesChanged: if (root.opened) root.rebuildRows()
   }
 
+  BindingsSetup { id: bindingsSetup }
+
   PanelWindow {
     id: panel
     screen: root.targetScreen
@@ -405,10 +416,28 @@ Item {
       cardHeight: root.cardHeight
       geometryAnimationsReady: root.geometryAnimationsReady
 
+      SetupBanner {
+        id: setupBanner
+        visible: root.offerSetup && !root.dismissedSetup
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.margins: root.contentMargin
+        missing: bindingsSetup.missing
+        busy: bindingsSetup.busy
+        error: bindingsSetup.error
+        onSetupRequested: { bindingsSetup.apply(); keyCatcher.forceActiveFocus() }
+        onDismissed: {
+          root.dismissedSetup = true
+          pluginSettings.set("setupDismissed", true)
+          keyCatcher.forceActiveFocus()
+        }
+      }
       Row {
         visible: !root.settingsOpen
         anchors.fill: parent
         anchors.margins: root.contentMargin
+        anchors.topMargin: root.contentMargin + root.setupHeight
         spacing: root.gap
 
         Column {
@@ -473,6 +502,12 @@ Item {
         visible: root.settingsOpen
         values: pluginSettings.values
         ready: pluginSettings.ready
+        bindingState: bindingsSetup.state
+        bindingsLoaded: bindingsSetup.loaded
+        bindingsBusy: bindingsSetup.busy
+        bindingsError: bindingsSetup.error
+        onSetupRequested: bindingsSetup.apply()
+        onRemoveRequested: bindingsSetup.remove()
         onChanged: (key, value) => pluginSettings.set(key, value)
         onClosed: root.setSettingsOpen(false)
       }
