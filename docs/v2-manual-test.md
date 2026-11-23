@@ -2,7 +2,7 @@
 
 Run this checklist on Omarchy before tagging `v2.0.0`. Use a disposable Hyprland config for the setup and rollback cases. Keep a copy of your real `~/.config/hypr/bindings.lua` outside the plugin directory.
 
-From the v2 checkout, run `node --test tests/`. Load the checkout through your local Omarchy plugin setup, then run:
+From the v2 checkout, run `node --test tests/*.test.js`. Load the checkout through your local Omarchy plugin setup, then run:
 
 ```bash
 omarchy-shell shell toggle piyush.omaswitch
