@@ -263,8 +263,6 @@ Item {
       root.cycleApp = Model.appId(root.allWindows[0])
       root.rebuildRows()
     }
-    if (root.shell && root.shell.appLibrary && typeof root.shell.appLibrary.refreshIcons === "function")
-      root.shell.appLibrary.refreshIcons()
     // rows[0] is the focused window by construction, so its neighbour is
     // always a genuine switch target.
     if (root.cycleMode && root.rows.length > 1)
