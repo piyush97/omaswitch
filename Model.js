@@ -35,6 +35,8 @@ function windowSnapshot(window) {
     title: String(window.title || ""),
     activated: !!window.activated,
     workspace: window.workspace ? { id: window.workspace.id } : null,
+    monitor: window.monitor ? { name: String(window.monitor.name || "") }
+      : window.workspace && window.workspace.monitor ? { name: String(window.workspace.monitor.name || "") } : null,
     lastIpcObject: { class: appId(window), focusHistoryID: historyRank(window) }
   }
 }

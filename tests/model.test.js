@@ -71,6 +71,7 @@ const liveWindow = {
   activated: true,
   wayland: { appId: "code" },
   workspace: { id: 4 },
+  monitor: { name: "DP-1" },
   lastIpcObject: { focusHistoryID: 2 }
 }
 const snapshot = Model.windowSnapshot(liveWindow)
@@ -79,8 +80,11 @@ assert.deepEqual(snapshot, {
   title: "Editor",
   activated: true,
   workspace: { id: 4 },
+  monitor: { name: "DP-1" },
   lastIpcObject: { class: "code", focusHistoryID: 2 }
 })
+assert.notEqual(snapshot.monitor, liveWindow.monitor, "monitor metadata must be copied")
+assert.deepEqual(Model.scopedWindows([snapshot], "monitor", { monitorName: "DP-1" }), [snapshot])
 assert.equal(snapshot.wayland, undefined, "delegate snapshots must not retain Toplevel QObjects")
 assert.notEqual(snapshot.workspace, liveWindow.workspace, "workspace metadata must be copied")
 assert.equal(Model.windowForAddress([liveWindow], "abc"), liveWindow)

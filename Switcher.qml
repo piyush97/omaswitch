@@ -28,6 +28,18 @@ Item {
   property string filterText: ""
   property int selectedIndex: -1
   property bool helpOpen: false
+  property bool settingsOpen: false
+  property var targetScreen: null
+  readonly property var candidates: cycleApp ? allWindows.filter(window => Model.appId(window) === cycleApp)
+    : Model.scopedWindows(allWindows, pluginSettings.values.scope, {
+        workspaceId: Hyprland.focusedWorkspace?.id,
+        monitorName: Hyprland.focusedMonitor?.name
+      })
+  onCandidatesChanged: {
+    if (!root.opened) return
+    root.rebuildRows()
+    ocrIndexer.beginOcrIndex()
+  }
   readonly property var selectedWindow: rows[selectedIndex]?.window || null
   readonly property var previewHighlights: root.opened && selectedWindow
     ? Model.ocrHighlights(selectedWindow, filterText, ocrIndexer.textByAddress) : []
@@ -48,14 +60,14 @@ Item {
   readonly property HyprlandToplevel selectedToplevel: root.opened && selectedWindow
     ? Model.windowForAddress(Hyprland.toplevels.values, selectedWindow.address) : null
   readonly property Toplevel previewTarget: root.selectedToplevel ? root.selectedToplevel.wayland : null
-  readonly property bool previewLayout: root.opened && root.previewTarget !== null
+  readonly property bool previewLayout: root.opened && pluginSettings.values.livePreview && root.previewTarget !== null
 
   readonly property int cardWidth: Math.min(root.previewLayout ? Style.space(1080) : Style.space(760), panel.width - Style.gapsOut * 2)
-  readonly property int footerHeight: cycleMode || helpOpen ? 0 : Style.space(24)
+  readonly property int footerHeight: cycleMode || helpOpen || settingsOpen ? 0 : Style.space(24)
   readonly property int desiredListHeight: Math.max(root.rowHeight * 2, rows.length * root.rowHeight * (filterText ? 1.35 : 1))
   readonly property int desiredCardHeight: root.contentMargin * 2 + root.headerHeight + root.listGap + root.desiredListHeight + footerHeight
   readonly property int cardHeight: Math.min(
-    Math.max(root.previewLayout || root.helpOpen ? Style.space(400) : 0, root.desiredCardHeight),
+    Math.max(root.previewLayout || root.helpOpen || root.settingsOpen ? Style.space(400) : 0, root.desiredCardHeight),
     panel.height - Style.gapsOut * 2)
   readonly property int contentHeight: Math.max(0, card.height - root.contentMargin * 2)
   readonly property int innerWidth: Math.max(0, card.width - root.contentMargin * 2)
@@ -69,7 +81,6 @@ Item {
 
   function rebuildRows() {
     var address = Model.addressKey(selectedWindow)
-    var candidates = cycleApp ? allWindows.filter(window => Model.appId(window) === cycleApp) : allWindows
     var filtered = Model.filteredWindows(candidates, filterText, ocrIndexer.textByAddress)
     rows = Model.displayRows(filtered, { group: !cycleMode && pluginSettings.values.groupByWorkspace })
     var retained = address ? rows.findIndex(row => row.kind === "window" && Model.addressKey(row.window) === address) : -1
@@ -194,6 +205,13 @@ Item {
     root.focusSelected()
   }
 
+  function setSettingsOpen(value) {
+    settingsOpen = value
+    helpOpen = false
+    if (value) settingsView.focusFirst()
+    else keyCatcher.forceActiveFocus()
+  }
+
   function open(payloadJson) {
     var payload = ({})
     try { payload = JSON.parse(payloadJson || "{}") } catch (e) { payload = ({}) }
@@ -204,6 +222,7 @@ Item {
     if (root.opened && payload.mode === "cycle") {
       root.cycleMode = true
       root.helpOpen = false
+      if (root.settingsOpen) root.setSettingsOpen(false)
       root.cycleApp = appScope ? (root.cycleApp || Model.appId(root.selectedWindow)) : ""
       if (appScope) root.filterText = ""
       root.rebuildRows()
@@ -221,6 +240,9 @@ Item {
     root.cycleApp = ""
     root.filterText = ""
     root.helpOpen = false
+    root.settingsOpen = false
+    var monitorName = Hyprland.focusedMonitor?.name
+    root.targetScreen = Quickshell.screens.find(screen => screen.name === monitorName) || null
     root.selectedIndex = -1
 
     // Build the initial model and choose the initial row before making the
@@ -252,6 +274,7 @@ Item {
     root.geometryAnimationsReady = false
     root.opened = false
     root.helpOpen = false
+    root.settingsOpen = false
     root.cycleMode = false
     root.cycleApp = ""
     root.closingAddresses = ({})
@@ -340,9 +363,10 @@ Item {
 
   OcrIndexer {
     id: ocrIndexer
-    windows: root.allWindows
+    windows: root.candidates
     query: root.filterText
-    enabled: root.opened
+    enabled: root.opened && pluginSettings.values.contentSearch
+    onEnabledChanged: if (!enabled) reset()
     onTextByAddressChanged: root.rebuildRows()
   }
 
@@ -355,6 +379,7 @@ Item {
 
   PanelWindow {
     id: panel
+    screen: root.targetScreen
     visible: root.opened
     anchors { top: true; bottom: true; left: true; right: true }
     color: "transparent"
@@ -381,6 +406,7 @@ Item {
       geometryAnimationsReady: root.geometryAnimationsReady
 
       Row {
+        visible: !root.settingsOpen
         anchors.fill: parent
         anchors.margins: root.contentMargin
         spacing: root.gap
@@ -396,6 +422,8 @@ Item {
             text: root.filterText
             searching: ocrIndexer.searching
             showHelp: !root.cycleMode
+            showSettings: !root.cycleMode
+            onSettingsRequested: root.setSettingsOpen(true)
             onHelpRequested: { root.helpOpen = !root.helpOpen; keyCatcher.forceActiveFocus() }
           }
 
@@ -411,7 +439,7 @@ Item {
             iconSource: root.iconSource
             query: root.filterText
             snippetFor: window => Model.matchSnippet(window, root.filterText, ocrIndexer.textByAddress)
-            emptyText: root.allWindows.length === 0 ? "No windows" :
+            emptyText: root.candidates.length === 0 ? (root.allWindows.length === 0 ? "No windows" : "No windows in this scope") :
               'No match for "' + root.filterText + '"' + (ocrIndexer.searching ? "\nSearching window contents…" : "")
             onActivated: function(index) { root.selectedIndex = index; root.focusSelected() }
           }
@@ -420,7 +448,7 @@ Item {
             height: root.footerHeight
             cycleMode: root.cycleMode
             visible: root.footerHeight > 0
-            text: "Enter switch · Ctrl+W close · Ctrl+M move · Alt+1–9 jump"
+            text: "Enter switch · Ctrl+W close · Ctrl+M move · Alt+1–9 jump · Ctrl+, settings"
           }
         }
 
@@ -433,10 +461,20 @@ Item {
           height: parent.height
           window: root.previewTarget
           highlights: root.previewHighlights
-          captureEnabled: root.opened
+          captureEnabled: root.opened && root.previewLayout && !root.settingsOpen && !root.helpOpen
           previewConstraintWidth: root.previewConstraintWidth
           previewConstraintHeight: root.previewConstraintHeight
         }
+      }
+      SettingsView {
+        id: settingsView
+        anchors.fill: parent
+        anchors.margins: root.contentMargin
+        visible: root.settingsOpen
+        values: pluginSettings.values
+        ready: pluginSettings.ready
+        onChanged: (key, value) => pluginSettings.set(key, value)
+        onClosed: root.setSettingsOpen(false)
       }
       ScrollView {
         visible: root.helpOpen
@@ -470,6 +508,9 @@ Item {
           event.accepted = true
         } else if (event.key === Qt.Key_Question && (root.helpOpen || !root.filterText)) {
           root.helpOpen = !root.helpOpen
+          event.accepted = true
+        } else if (!root.cycleMode && event.key === Qt.Key_Comma && event.modifiers === Qt.ControlModifier) {
+          root.setSettingsOpen(true)
           event.accepted = true
         } else if (root.helpOpen) {
           event.accepted = true

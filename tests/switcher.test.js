@@ -10,6 +10,14 @@ test('close and move target a selected window without shell interpolation', () =
   assert.match(qml, /Model\.moveHereLua\(selectedWindow, workspace\.id\)/)
 })
 
+test('picker scopes snapshots and opens on the focused monitor', () => {
+  assert.match(qml, /Model\.scopedWindows\(allWindows, pluginSettings\.values\.scope,/)
+  assert.match(qml, /Quickshell\.screens\.find/)
+  assert.match(qml, /screen: root\.targetScreen/)
+  assert.match(qml, /enabled: root\.opened && pluginSettings\.values\.contentSearch/)
+  assert.match(qml, /pluginSettings\.values\.livePreview && root\.previewTarget/)
+})
+
 test('picker groups rows while cycling stays flat and selection skips headers', () => {
   assert.match(qml, /Model\.displayRows\([^]*?group: !cycleMode && pluginSettings\.values\.groupByWorkspace/)
   assert.match(qml, /Model\.clampSelection\(rows,/)
