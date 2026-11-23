@@ -21,6 +21,7 @@ Item {
   property bool opened: false
   property bool geometryAnimationsReady: false
   property bool cycleMode: false
+  property string cycleApp: ""
   property var mruAddresses: []
   property var pendingMruPromotions: []
   property string filterText: ""
@@ -67,7 +68,8 @@ Item {
 
   function rebuildRows() {
     var address = Model.addressKey(selectedWindow)
-    var filtered = Model.filteredWindows(allWindows, filterText, ocrIndexer.textByAddress)
+    var candidates = cycleApp ? allWindows.filter(window => Model.appId(window) === cycleApp) : allWindows
+    var filtered = Model.filteredWindows(candidates, filterText, ocrIndexer.textByAddress)
     rows = Model.displayRows(filtered, { group: !cycleMode && pluginSettings.values.groupByWorkspace })
     var retained = address ? rows.findIndex(row => row.kind === "window" && Model.addressKey(row.window) === address) : -1
     selectedIndex = Model.clampSelection(rows, retained >= 0 ? retained : selectedIndex)
@@ -154,7 +156,7 @@ Item {
   }
 
   function select(delta) {
-    selectedIndex = Model.stepWindowRow(rows, selectedIndex, delta)
+    selectedIndex = cycleApp ? Model.appCycleIndex(rows, selectedIndex, delta) : Model.stepWindowRow(rows, selectedIndex, delta)
     keepSelectionVisible.restart()
   }
 
@@ -171,8 +173,12 @@ Item {
     var direction = Number(payload.direction) < 0 ? -1 : 1
 
     // Repeated Alt+Tab summons cycle instead of resetting or closing.
+    var appScope = payload.mode === "cycle" && payload.scope === "app"
     if (root.opened && payload.mode === "cycle") {
       root.cycleMode = true
+      root.helpOpen = false
+      root.cycleApp = appScope ? (root.cycleApp || Model.appId(root.selectedWindow)) : ""
+      if (appScope) root.filterText = ""
       root.rebuildRows()
       root.select(direction)
       return
@@ -185,6 +191,7 @@ Item {
     previewPane.resetPreview()
     ocrIndexer.reset()
     root.cycleMode = payload.mode === "cycle"
+    root.cycleApp = ""
     root.filterText = ""
     root.helpOpen = false
     root.selectedIndex = -1
@@ -193,6 +200,10 @@ Item {
     // PanelWindow visible. previewLayout can therefore start at its final
     // geometry instead of growing after the first screencopy frame arrives.
     root.refresh()
+    if (appScope) {
+      root.cycleApp = Model.appId(root.allWindows[0])
+      root.rebuildRows()
+    }
     if (root.shell && root.shell.appLibrary && typeof root.shell.appLibrary.refreshIcons === "function")
       root.shell.appLibrary.refreshIcons()
     // rows[0] is the focused window by construction, so its neighbour is
@@ -215,6 +226,7 @@ Item {
     root.opened = false
     root.helpOpen = false
     root.cycleMode = false
+    root.cycleApp = ""
     previewPane.resetPreview()
     ocrIndexer.reset()
     root.rows = []
