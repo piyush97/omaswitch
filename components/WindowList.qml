@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import "../Model.js" as Model
 
 ListView {
@@ -27,7 +28,7 @@ ListView {
     visible: root.count === 0
     text: root.emptyText
     textFormat: Text.PlainText
-    color: Color.menu.text
+    color: Commons.Color.menu.text
     font.family: Style.font.menuFamily
     font.pixelSize: Style.font.body
   }

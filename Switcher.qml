@@ -5,6 +5,7 @@ import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "Model.js" as Model
 import "services"
@@ -401,7 +402,7 @@ Item {
 
     Rectangle {
       anchors.fill: parent
-      color: Color.menu.scrim
+      color: Commons.Color.menu.scrim
     }
 
     MouseArea {
@@ -522,7 +523,7 @@ Item {
           width: parent.width
           wrapMode: Text.Wrap
           text: "Shortcuts\n↑ / ↓ or Tab: Select\nEnter: Switch\nAlt+1–9: Jump\nAlt+Tab / Alt+Shift+Tab: Cycle\nAlt+`: Cycle within app\nCtrl+W: Close window\nCtrl+M: Move here\nCtrl+,: Settings\nEsc: Back"
-          color: Color.menu.text
+          color: Commons.Color.menu.text
           font.family: Style.font.menuFamily
           font.pixelSize: Style.font.body
         }

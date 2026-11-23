@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell.Wayland
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 BorderSurface {
@@ -125,8 +126,8 @@ BorderSurface {
       resetPreview()
   }
   radius: Style.cornerRadius
-  color: Color.menu.scrim
-  property var previewBorderSpec: Border.surfaceSpec("popups", "border", Color.menu.border, Math.max(1, Style.space(1)))
+  color: Commons.Color.menu.scrim
+  property var previewBorderSpec: Border.surfaceSpec("popups", "border", Commons.Color.menu.border, Math.max(1, Style.space(1)))
   borderSpec: Border.none()
   clip: false
 
@@ -190,8 +191,8 @@ BorderSurface {
           width: modelData.w * ocrHighlightLayer.width + 6
           height: modelData.h * ocrHighlightLayer.height + 4
           radius: 3
-          color: Qt.rgba(Color.menu.selectedBackground.r, Color.menu.selectedBackground.g, Color.menu.selectedBackground.b, 0.25)
-          border.color: Color.menu.selectedBackground
+          color: Qt.rgba(Commons.Color.menu.selectedBackground.r, Commons.Color.menu.selectedBackground.g, Commons.Color.menu.selectedBackground.b, 0.25)
+          border.color: Commons.Color.menu.selectedBackground
           border.width: 2
         }
       }

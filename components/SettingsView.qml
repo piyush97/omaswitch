@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import qs.Commons
+import qs.Commons as Commons
 import "../Settings.js" as Settings
 import "../Bindings.js" as Bindings
 
@@ -39,7 +40,7 @@ ScrollView {
     }
     Text {
       text: "OmaSwitch settings"
-      color: Color.menu.text
+      color: Commons.Color.menu.text
       font.family: Style.font.menuFamily
       font.pixelSize: Style.font.title
     }
@@ -48,7 +49,7 @@ ScrollView {
       enabled: root.ready
       Text {
         text: "Window scope"
-        color: Color.menu.text
+        color: Commons.Color.menu.text
         font.family: Style.font.menuFamily
         font.pixelSize: Style.font.body
       }
@@ -74,7 +75,7 @@ ScrollView {
     }
     Text {
       text: "Alt+Tab bindings"
-      color: Color.menu.text
+      color: Commons.Color.menu.text
       font.family: Style.font.menuFamily
       font.pixelSize: Style.font.body
     }
@@ -84,7 +85,7 @@ ScrollView {
       wrapMode: Text.Wrap
       textFormat: Text.PlainText
       text: root.bindingsError || "Add the bindings from the README to ~/.config/hypr/bindings.lua."
-      color: Color.menu.text
+      color: Commons.Color.menu.text
       font.family: Style.font.menuFamily
       font.pixelSize: Style.font.body
     }
@@ -111,7 +112,7 @@ ScrollView {
       visible: !!root.bindingState?.handWritten && !root.bindingState.hasAppScope
       Text {
         text: "Add this line for same-app cycling:"
-        color: Color.menu.text
+        color: Commons.Color.menu.text
       }
       TextEdit {
         id: appBinding
@@ -119,7 +120,7 @@ ScrollView {
         wrapMode: TextEdit.WrapAnywhere
         readOnly: true
         selectByMouse: true
-        color: Color.menu.text
+        color: Commons.Color.menu.text
         text: Bindings.appScopeLine()
       }
       Button {
