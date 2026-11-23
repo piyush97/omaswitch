@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
@@ -23,9 +24,11 @@ Item {
   property var mruAddresses: []
   property var pendingMruPromotions: []
   property string filterText: ""
-  property int selectedIndex: 0
-  readonly property var previewHighlights: root.opened && selectedIndex >= 0 && selectedIndex < rows.length
-    ? Model.ocrHighlights(rows[selectedIndex], filterText, ocrIndexer.textByAddress) : []
+  property int selectedIndex: -1
+  property bool helpOpen: false
+  readonly property var selectedWindow: rows[selectedIndex]?.window || null
+  readonly property var previewHighlights: root.opened && selectedWindow
+    ? Model.ocrHighlights(selectedWindow, filterText, ocrIndexer.textByAddress) : []
   property int openGeneration: 0
 
   // Scalar window snapshots + filtered rows; no QObjects in the delegate model.
@@ -40,36 +43,39 @@ Item {
 
   // Guard the index: assigning a shorter rows array notifies bindings before
   // rebuildRows() gets to clamp selectedIndex.
-  readonly property HyprlandToplevel selectedToplevel: root.opened && selectedIndex >= 0 && selectedIndex < rows.length
-    ? Model.windowForAddress(Hyprland.toplevels.values, rows[selectedIndex].address) : null
+  readonly property HyprlandToplevel selectedToplevel: root.opened && selectedWindow
+    ? Model.windowForAddress(Hyprland.toplevels.values, selectedWindow.address) : null
   readonly property Toplevel previewTarget: root.selectedToplevel ? root.selectedToplevel.wayland : null
   readonly property bool previewLayout: root.opened && root.previewTarget !== null
 
   readonly property int cardWidth: Math.min(root.previewLayout ? Style.space(1080) : Style.space(760), panel.width - Style.gapsOut * 2)
-  readonly property int desiredListHeight: Math.max(root.rowHeight, rows.length * root.rowHeight)
-  readonly property int desiredCardHeight: root.contentMargin * 2 + root.headerHeight + root.listGap + root.desiredListHeight
+  readonly property int footerHeight: cycleMode || helpOpen ? 0 : Style.space(24)
+  readonly property int desiredListHeight: Math.max(root.rowHeight * 2, rows.length * root.rowHeight * (filterText ? 1.35 : 1))
+  readonly property int desiredCardHeight: root.contentMargin * 2 + root.headerHeight + root.listGap + root.desiredListHeight + footerHeight
   readonly property int cardHeight: Math.min(
-    Math.max(root.previewLayout ? Style.space(400) : 0, root.desiredCardHeight),
+    Math.max(root.previewLayout || root.helpOpen ? Style.space(400) : 0, root.desiredCardHeight),
     panel.height - Style.gapsOut * 2)
   readonly property int contentHeight: Math.max(0, card.height - root.contentMargin * 2)
   readonly property int innerWidth: Math.max(0, card.width - root.contentMargin * 2)
   readonly property int listWidth: root.previewLayout ? Math.max(Style.space(300), Math.round(root.innerWidth * 0.40)) : root.innerWidth
   readonly property int previewWidth: root.previewLayout ? Math.max(0, root.innerWidth - root.listWidth - root.gap) : 0
-  readonly property int listHeight: Math.max(0, root.contentHeight - root.headerHeight - root.listGap)
+  readonly property int listHeight: Math.max(0, root.contentHeight - root.headerHeight - root.listGap - root.footerHeight - (root.footerHeight ? root.listGap : 0))
   // Positive before the pane appears, so ScreencopyView can obtain its first
   // frame and flip hasContent without depending on a zero-sized parent.
   readonly property int previewConstraintWidth: Math.max(1, Math.min(Style.space(580), panel.width - Style.space(420)))
   readonly property int previewConstraintHeight: Math.max(1, Math.min(Style.space(360), panel.height - Style.gapsOut * 2 - root.contentMargin * 2))
 
   function rebuildRows() {
-    rows = Model.filteredWindows(allWindows, filterText, ocrIndexer.textByAddress)
-    if (selectedIndex >= rows.length) selectedIndex = Math.max(0, rows.length - 1)
-    if (selectedIndex < 0 && rows.length > 0) selectedIndex = 0
+    var address = Model.addressKey(selectedWindow)
+    var filtered = Model.filteredWindows(allWindows, filterText, ocrIndexer.textByAddress)
+    rows = Model.displayRows(filtered, { group: !cycleMode && pluginSettings.values.groupByWorkspace })
+    var retained = address ? rows.findIndex(row => row.kind === "window" && Model.addressKey(row.window) === address) : -1
+    selectedIndex = Model.clampSelection(rows, retained >= 0 ? retained : selectedIndex)
   }
 
   function setFilter(value) {
     filterText = value
-    selectedIndex = 0
+    selectedIndex = -1
     rebuildRows()
   }
 
@@ -140,7 +146,7 @@ Item {
   // clobbered the switch and releasing Alt appeared to do nothing. Dismiss
   // first, then apply the selection once the restore has landed.
   function focusSelected() {
-    var window = rows[selectedIndex]
+    var window = selectedWindow
     if (!window) return root.dismiss()
     root.pendingFocus = window
     root.dismiss()
@@ -148,9 +154,15 @@ Item {
   }
 
   function select(delta) {
-    if (rows.length === 0) return
-    selectedIndex = (selectedIndex + delta + rows.length) % rows.length
+    selectedIndex = Model.stepWindowRow(rows, selectedIndex, delta)
     keepSelectionVisible.restart()
+  }
+
+  function jump(number) {
+    var index = Model.windowRowIndex(root.rows, number)
+    if (index < 0) return
+    root.selectedIndex = index
+    root.focusSelected()
   }
 
   function open(payloadJson) {
@@ -161,6 +173,7 @@ Item {
     // Repeated Alt+Tab summons cycle instead of resetting or closing.
     if (root.opened && payload.mode === "cycle") {
       root.cycleMode = true
+      root.rebuildRows()
       root.select(direction)
       return
     }
@@ -173,7 +186,8 @@ Item {
     ocrIndexer.reset()
     root.cycleMode = payload.mode === "cycle"
     root.filterText = ""
-    root.selectedIndex = 0
+    root.helpOpen = false
+    root.selectedIndex = -1
 
     // Build the initial model and choose the initial row before making the
     // PanelWindow visible. previewLayout can therefore start at its final
@@ -199,6 +213,7 @@ Item {
     root.openGeneration++
     root.geometryAnimationsReady = false
     root.opened = false
+    root.helpOpen = false
     root.cycleMode = false
     previewPane.resetPreview()
     ocrIndexer.reset()
@@ -294,6 +309,7 @@ Item {
     id: pluginSettings
     pluginId: (root.manifest && root.manifest.id) || "piyush.omaswitch"
     shell: root.shell
+    onValuesChanged: if (root.opened) root.rebuildRows()
   }
 
   PanelWindow {
@@ -338,19 +354,31 @@ Item {
             height: root.headerHeight
             text: root.filterText
             searching: ocrIndexer.searching
+            showHelp: !root.cycleMode
+            onHelpRequested: { root.helpOpen = !root.helpOpen; keyCatcher.forceActiveFocus() }
           }
 
           WindowList {
             id: listView
             width: parent.width
-            height: root.listHeight
+            visible: !root.helpOpen || root.previewLayout
+            height: visible ? root.listHeight : 0
             rows: root.rows
             rowHeight: root.rowHeight
             selectedIndex: root.selectedIndex
             iconSource: root.iconSource
-            emptyText: ocrIndexer.searching ? "Searching window contents…" :
-              (root.filterText ? "No matching windows" : "No windows")
+            query: root.filterText
+            snippetFor: window => Model.matchSnippet(window, root.filterText, ocrIndexer.textByAddress)
+            emptyText: root.allWindows.length === 0 ? "No windows" :
+              'No match for "' + root.filterText + '"' + (ocrIndexer.searching ? "\nSearching window contents…" : "")
             onActivated: function(index) { root.selectedIndex = index; root.focusSelected() }
+          }
+          FooterHints {
+            width: parent.width
+            height: root.footerHeight
+            cycleMode: root.cycleMode
+            visible: root.footerHeight > 0
+            text: "Enter switch · Alt+1–9 jump · ? shortcuts"
           }
         }
 
@@ -358,7 +386,7 @@ Item {
         // selected; the capture view fades in once frames arrive.
         PreviewPane {
           id: previewPane
-          visible: root.previewLayout
+          visible: root.previewLayout && !root.helpOpen
           width: root.previewWidth
           height: parent.height
           window: root.previewTarget
@@ -366,6 +394,22 @@ Item {
           captureEnabled: root.opened
           previewConstraintWidth: root.previewConstraintWidth
           previewConstraintHeight: root.previewConstraintHeight
+        }
+      }
+      ScrollView {
+        visible: root.helpOpen
+        anchors.fill: parent
+        anchors.margins: root.contentMargin
+        anchors.topMargin: root.contentMargin + (root.previewLayout ? 0 : root.headerHeight + root.listGap)
+        anchors.leftMargin: root.contentMargin + (root.previewLayout ? root.listWidth + root.gap : 0)
+        contentWidth: availableWidth
+        Text {
+          width: parent.width
+          wrapMode: Text.Wrap
+          text: "Shortcuts\n↑ / ↓ or Tab: Select\nEnter: Switch\nAlt+1–9: Jump\nAlt+Tab / Alt+Shift+Tab: Cycle\nAlt+`: Cycle within app\nCtrl+W: Close window\nCtrl+M: Move here\nCtrl+,: Settings\nEsc: Back"
+          color: Color.menu.text
+          font.family: Style.font.menuFamily
+          font.pixelSize: Style.font.body
         }
       }
     }
@@ -379,7 +423,17 @@ Item {
       Keys.priority: Keys.BeforeItem
       Keys.onPressed: function(event) {
         if (event.key === Qt.Key_Escape) {
-          root.dismiss()
+          if (root.helpOpen) root.helpOpen = false
+          else root.dismiss()
+          event.accepted = true
+        } else if (event.key === Qt.Key_Question && (root.helpOpen || !root.filterText)) {
+          root.helpOpen = !root.helpOpen
+          event.accepted = true
+        } else if (root.helpOpen) {
+          event.accepted = true
+        } else if (event.key >= Qt.Key_1 && event.key <= Qt.Key_9 &&
+                   (event.modifiers === Qt.AltModifier || (root.cycleMode && event.modifiers === Qt.NoModifier))) {
+          root.jump(event.key - Qt.Key_0)
           event.accepted = true
         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
           root.focusSelected()

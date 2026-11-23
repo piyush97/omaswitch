@@ -8,6 +8,7 @@ ListView {
   property int rowHeight: 48
   property var iconSource
   property var snippetFor
+  property string query
   property string emptyText
   signal activated(int index)
   signal hovered(int index)
@@ -29,14 +30,28 @@ ListView {
     font.pixelSize: Style.font.body
   }
 
-  delegate: WindowRow {
+  delegate: Loader {
+    id: entry
     required property var modelData
     required property int index
     width: root.width
-    height: root.rowHeight
-    row: modelData
-    selected: index === root.selectedIndex
-    icon: root.iconSource(modelData)
-    onActivated: root.activated(index)
+    sourceComponent: modelData.kind === "header" ? header : windowRow
+    Component {
+      id: header
+      GroupHeader { height: Style.space(26); text: entry.modelData.label }
+    }
+    Component {
+      id: windowRow
+      WindowRow {
+        row: entry.modelData.window
+        jump: entry.modelData.jump
+        selected: entry.index === root.selectedIndex
+        icon: root.iconSource(row)
+        snippet: root.snippetFor(row)
+        query: root.query
+        height: root.rowHeight + (snippet ? Style.space(20) : 0)
+        onActivated: root.activated(entry.index)
+      }
+    }
   }
 }
