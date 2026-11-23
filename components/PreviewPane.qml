@@ -124,7 +124,7 @@ BorderSurface {
     if (source && (previewSourceA === source || previewSourceB === source))
       resetPreview()
   }
-        radius: Style.cornerRadius
+  radius: Style.cornerRadius
   color: Color.menu.scrim
   property var previewBorderSpec: Border.surfaceSpec("popups", "border", Color.menu.border, Math.max(1, Style.space(1)))
   borderSpec: Border.none()

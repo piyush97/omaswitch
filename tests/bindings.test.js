@@ -19,6 +19,10 @@ test("Bindings text logic", () => {
   assert.deepEqual(Bindings.newErrors("old error\n", "old error\nnew error\n"), ["new error"])
   assert.deepEqual(Bindings.newErrors("", "\n"), [])
 
+  const embeddedMarkers = 'print("' + Bindings.BEGIN + '")\nuser code\nprint("' + Bindings.END + '")\n'
+  assert.equal(Bindings.state(embeddedMarkers).managed, false)
+  assert.equal(Bindings.stripBlock(embeddedMarkers), embeddedMarkers)
+
   // Fix round 1: END-before-BEGIN is not managed
   const wrongOrder = "some content\n" + Bindings.END + "\n" + Bindings.BEGIN + "\nmore\n"
   assert.equal(Bindings.state(wrongOrder).managed, false, "END before BEGIN should not be managed")
