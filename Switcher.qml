@@ -19,11 +19,6 @@ Item {
   // openPanelIds; we must not fight it, so `opened` is only our UI state.
   property bool opened: false
   property bool geometryAnimationsReady: false
-  property bool geometrySyncQueued: false
-  property real displayedCardWidth: 0
-  property real displayedCardHeight: 0
-  property real cardXScale: 1
-  property real cardYScale: 1
   property bool cycleMode: false
   property var mruAddresses: []
   property var pendingMruPromotions: []
@@ -56,8 +51,8 @@ Item {
   readonly property int cardHeight: Math.min(
     Math.max(root.previewLayout ? Style.space(400) : 0, root.desiredCardHeight),
     panel.height - Style.gapsOut * 2)
-  readonly property int contentHeight: Math.max(0, root.displayedCardHeight - root.contentMargin * 2)
-  readonly property int innerWidth: Math.max(0, root.displayedCardWidth - root.contentMargin * 2)
+  readonly property int contentHeight: Math.max(0, card.height - root.contentMargin * 2)
+  readonly property int innerWidth: Math.max(0, card.width - root.contentMargin * 2)
   readonly property int listWidth: root.previewLayout ? Math.max(Style.space(300), Math.round(root.innerWidth * 0.40)) : root.innerWidth
   readonly property int previewWidth: root.previewLayout ? Math.max(0, root.innerWidth - root.listWidth - root.gap) : 0
   readonly property int listHeight: Math.max(0, root.contentHeight - root.headerHeight - root.listGap)
@@ -65,72 +60,6 @@ Item {
   // frame and flip hasContent without depending on a zero-sized parent.
   readonly property int previewConstraintWidth: Math.max(1, Math.min(Style.space(580), panel.width - Style.space(420)))
   readonly property int previewConstraintHeight: Math.max(1, Math.min(Style.space(360), panel.height - Style.gapsOut * 2 - root.contentMargin * 2))
-
-  property color background: Color.menu.background
-  property color border: Color.menu.border
-  property var borderSpec: Border.surfaceSpec("menu", "border", border, Math.max(1, Style.space(2)))
-  property color scrim: Color.menu.scrim
-  readonly property int cornerRadius: Style.cornerRadius
-
-  function scheduleCardGeometrySync() {
-    if (root.geometrySyncQueued) return
-    root.geometrySyncQueued = true
-    Qt.callLater(function() {
-      root.geometrySyncQueued = false
-      root.syncCardGeometry()
-    })
-  }
-
-  function syncCardGeometry() {
-    var nextWidth = root.cardWidth
-    var nextHeight = root.cardHeight
-    if (nextWidth <= 0 || nextHeight <= 0) return
-
-    var oldVisualWidth = root.displayedCardWidth > 0
-      ? root.displayedCardWidth * root.cardXScale : nextWidth
-    var oldVisualHeight = root.displayedCardHeight > 0
-      ? root.displayedCardHeight * root.cardYScale : nextHeight
-
-    cardXAnimation.stop()
-    cardYAnimation.stop()
-
-    root.displayedCardWidth = nextWidth
-    root.displayedCardHeight = nextHeight
-
-    if (!root.geometryAnimationsReady || Style.reduceMotion) {
-      root.cardXScale = 1
-      root.cardYScale = 1
-      return
-    }
-
-    // FLIP: snap layout once, then animate only the scene-graph transform.
-    // This avoids re-laying out ListView/ScreencopyView/borders every frame.
-    root.cardXScale = oldVisualWidth / nextWidth
-    root.cardYScale = oldVisualHeight / nextHeight
-    cardXAnimation.restart()
-    cardYAnimation.restart()
-  }
-
-  onCardWidthChanged: root.scheduleCardGeometrySync()
-  onCardHeightChanged: root.scheduleCardGeometrySync()
-
-  NumberAnimation {
-    id: cardXAnimation
-    target: root
-    property: "cardXScale"
-    to: 1
-    duration: 110
-    easing.type: Easing.OutCubic
-  }
-
-  NumberAnimation {
-    id: cardYAnimation
-    target: root
-    property: "cardYScale"
-    to: 1
-    duration: 110
-    easing.type: Easing.OutCubic
-  }
 
   function rebuildRows() {
     rows = Model.filteredWindows(allWindows, filterText, ocrIndexer.textByAddress)
@@ -331,7 +260,6 @@ Item {
     }
   }
 
-  Component.onCompleted: root.syncCardGeometry()
   Process {
     id: mruSeedProcess
     command: ["hyprctl", "clients", "-j"]
@@ -380,7 +308,7 @@ Item {
 
     Rectangle {
       anchors.fill: parent
-      color: root.scrim
+      color: Color.menu.scrim
     }
 
     MouseArea {
@@ -388,21 +316,12 @@ Item {
       onClicked: root.dismiss()
     }
 
-    BorderSurface {
+    SwitcherCard {
       id: card
-      width: root.displayedCardWidth
-      height: root.displayedCardHeight
-      radius: root.cornerRadius
       anchors.centerIn: parent
-
-      transform: Scale {
-        origin.x: card.width / 2
-        origin.y: card.height / 2
-        xScale: root.cardXScale
-        yScale: root.cardYScale
-      }
-      color: root.background
-      borderSpec: root.borderSpec
+      cardWidth: root.cardWidth
+      cardHeight: root.cardHeight
+      geometryAnimationsReady: root.geometryAnimationsReady
 
       Row {
         anchors.fill: parent
