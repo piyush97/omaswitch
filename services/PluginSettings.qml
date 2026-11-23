@@ -93,10 +93,11 @@ QtObject {
   }
 
   function set(name, value) {
-    if (name === "id" || !root.shell || typeof root.shell.updateEntryInline !== "function")
+    if (!root.shell || typeof root.shell.updateEntryInline !== "function")
       return false
-    var next = Object.assign({}, root.pending)
-    next[name] = JSON.parse(JSON.stringify(value))
+    var next = Settings.patch(root.pending, name, value)
+    if (next === null)
+      return false
     root.pending = next
     Qt.callLater(root.flush)
     return true
@@ -111,19 +112,24 @@ QtObject {
       console.warn(root.pluginId + ": cannot save settings without a configured plugin entry")
       return
     }
-    var next = Object.assign({}, root.diskEntry, root.pending)
+    var next = root.diskEntry
+    for (var name in root.pending) {
+      next = Settings.patch(next, name, root.pending[name])
+      if (next === null) {
+        root.discardEdits()
+        return
+      }
+    }
     if (root.contains(root.diskEntry, next)) {
       root.pending = ({})
       return
     }
     root.inFlight = next
     root.pending = ({})
-    var settings = Object.assign({}, next)
-    delete settings.id
     try {
       // false also means unchanged, and true only acknowledges the
       // host's in-memory update. Disk observation confirms either case.
-      root.shell.updateEntryInline(root.pluginId, settings)
+      root.shell.updateEntryInline(root.pluginId, next)
       root.confirmationTimeout.restart()
       root.reloadRequested()
     } catch (error) {

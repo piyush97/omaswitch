@@ -272,6 +272,8 @@ Item {
     filterText = value
     selectedIndex = 0
     rebuildRows()
+  }
+
   function refresh() {
     allWindows = Model.sortedWindows(Model.managedWindows(Hyprland.toplevels.values), root.mruAddresses).map(Model.windowSnapshot)
     rebuildRows()
@@ -424,11 +426,13 @@ Item {
       if (root.opened) {
         ocrIndexer.reset()
         root.refresh()
+        ocrIndexer.beginOcrIndex()
       }
     }
     function onObjectRemovedPost() {
       if (root.opened) {
         root.refresh()
+        ocrIndexer.beginOcrIndex()
       }
     }
   }
@@ -486,6 +490,7 @@ Item {
     windows: root.allWindows
     query: root.filterText
     enabled: root.opened
+    onTextByAddressChanged: root.rebuildRows()
   }
 
   PluginSettings {

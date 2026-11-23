@@ -176,6 +176,7 @@ QtObject {
   }
 
   property Process ocrProcess: Process {
+    id: ocrProcess
     property string address: ""
     property int generation: -1
     property string path: ""
@@ -194,9 +195,9 @@ QtObject {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        parent.output = text
-        parent.streamDone = true
-        parent.maybeComplete()
+        ocrProcess.output = text
+        ocrProcess.streamDone = true
+        ocrProcess.maybeComplete()
       }
     }
     onExited: {
@@ -208,7 +209,7 @@ QtObject {
   // A 1x1 non-interactive host keeps the capture in the scene graph while
   // grabToImage renders the full toplevel offscreen.
   property PanelWindow ocrHost: PanelWindow {
-    visible: enabled && root.ocrCaptureSource !== null
+    visible: root.enabled && root.ocrCaptureSource !== null
     implicitWidth: 1
     implicitHeight: 1
     color: "transparent"
