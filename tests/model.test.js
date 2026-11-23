@@ -191,11 +191,11 @@ vm.runInContext(grabHandler[0], captureContext)
 for (const [width, height, dpr, expectedWidth, expectedHeight] of [
   [1920, 1080, 1, 3840, 2160],
   [3840, 2160, 1, 7680, 4320],
-  [3840, 2160, 1.25, 7680, 4320],
-  [3840, 2160, 1.5, 7680, 4320],
-  [3840, 2160, 1.75, 7679, 4319],
-  [3840, 2160, 2, 7680, 4320],
-  [2160, 3840, 2, 4320, 7680],
+  [3840, 2160, 1.25, 6144, 3455],
+  [3840, 2160, 1.5, 5120, 2880],
+  [3840, 2160, 1.75, 4387, 2468],
+  [3840, 2160, 2, 3840, 2160],
+  [2160, 3840, 2, 2160, 3840],
   [5120, 1440, 1, 7680, 2160],
   [7680, 4320, 1, 7680, 4320],
   [10240, 2880, 2, 7680, 2160]
@@ -212,7 +212,22 @@ for (const [width, height, dpr, expectedWidth, expectedHeight] of [
   }
   captureContext.grabOcrFrame()
   assert.deepEqual([Math.round(target.width * dpr), Math.round(target.height * dpr)], [expectedWidth, expectedHeight],
-    "OCR capture must enlarge small glyphs, preserve aspect ratio, and bound physical pixels independently of display scaling")
+    "OCR capture must render at 2x logical size (not 2x a HiDPI buffer), preserve aspect ratio, and bound physical pixels")
+}
+{
+  // Fractional scaling: Screen rounds 1.5 up to 2, but grabToImage uses the
+  // host window's 1.5. Sizing from Screen rendered 0.75x and broke OCR.
+  let target
+  captureContext.root.ocrGrabPending = false
+  captureContext.ocrCaptureView = {
+    hasContent: true, sourceSize: { width: 1884, height: 1022 },
+    Screen: { devicePixelRatio: 2 },
+    Window: { window: { devicePixelRatio: 1.5 } },
+    grabToImage: function(callback, size) { target = size; return true }
+  }
+  captureContext.grabOcrFrame()
+  assert.deepEqual([Math.round(target.width * 1.5), Math.round(target.height * 1.5)], [2511, 1362],
+    "OCR capture must size from the host window's fractional device pixel ratio")
 }
 const timeoutHandler = previewQml.match(/id: previewCaptureTimeout[\s\S]*?onTriggered: \{([\s\S]*?)^    \}/m)
 assert.ok(timeoutHandler, "pending preview captures must have bounded cancellation")
@@ -470,6 +485,12 @@ assert.equal(Model.appCycleIndex(soloRows, 0, 1), 0)
 assert.deepEqual(Model.titleMatch({ title: "GitHub - Pull" }, "hub"), { before: "Git", match: "Hub", after: " - Pull" })
 assert.equal(Model.titleMatch({ title: "x" }, ""), null)
 assert.deepEqual(Model.titleMatch({ title: "İ GitHub" }, "hub"), { before: "İ Git", match: "Hub", after: "" })
+// Typing a plain "i" must find "İ": its default lowercase is "i" + U+0307.
+const dotted = { title: "İstanbul probe", lastIpcObject: { class: "kitty" } }
+assert.deepEqual(Model.filteredWindows([dotted], "istanbul"), [dotted], "a plain i must match a dotted capital İ")
+assert.deepEqual(Model.titleMatch(dotted, "istanbul"), { before: "", match: "İstanbul", after: " probe" })
+assert.deepEqual(rounded(Model.ocrHighlights(visualOnly, "izmir", { abc: Model.parseOcrTsv(dottedTsv) })),
+  [{ x: 0.12, y: 0.1, w: 0.1, h: 0.04 }], "OCR boxes must find İ words from a plain i query")
 
 // moveHereLua and closeTarget
 assert.match(Model.moveHereLua({ address: "0xabc", workspace: { id: 3 } }, 1), /hl\.dsp\.window\.move\(\{ workspace = '1', follow = false, window = 'address:0xabc' \}\)/)

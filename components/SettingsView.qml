@@ -55,6 +55,7 @@ ScrollView {
       }
       ComboBox {
         Accessible.name: "Window scope"
+        implicitContentWidthPolicy: ComboBox.WidestText
         model: ["All workspaces", "Current workspace", "Current monitor"]
         currentIndex: Settings.scopes.indexOf(root.values.scope)
         onActivated: root.changed("scope", Settings.scopes[index])
