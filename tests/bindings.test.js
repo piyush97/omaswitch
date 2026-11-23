@@ -41,3 +41,9 @@ test("Bindings text logic", () => {
   assert.ok(stripped.includes("user code here"), "stripBlock should preserve non-blank user line")
   assert.equal(stripped, userLine, "stripBlock should only remove block and blank line")
 })
+
+test("same-app copy line binds Alt+Grave instead of unbinding it", () => {
+  const line = Bindings.appScopeLine()
+  assert.match(line, /^o\.bind\("ALT \+ GRAVE"/, "the copied line must add the binding")
+  assert.match(line, /\\"scope\\":\\"app\\"/, "the copied line must summon same-app cycling")
+})
