@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import qs.Commons
 import qs.Commons as Commons
-import "../Settings.js" as Settings
+import qs.Ui as Ui
 import "../Bindings.js" as Bindings
 
 ScrollView {
@@ -33,9 +33,11 @@ ScrollView {
     width: root.availableWidth
     spacing: Style.space(8)
 
-    Button {
+    Ui.Button {
       id: backButton
       text: "Back to windows"
+      focusable: true
+      bordered: true
       onClicked: root.closed()
     }
     Text {
@@ -45,20 +47,20 @@ ScrollView {
       font.pixelSize: Style.font.title
     }
     Column {
+      width: Math.min(parent.width, Style.space(360))
       spacing: Style.space(4)
       enabled: root.ready
-      Text {
-        text: "Window scope"
-        color: Commons.Color.menu.text
-        font.family: Style.font.menuFamily
-        font.pixelSize: Style.font.body
-      }
-      ComboBox {
+      Ui.Dropdown {
+        width: parent.width
+        label: "Window scope"
         Accessible.name: "Window scope"
-        implicitContentWidthPolicy: ComboBox.WidestText
-        model: ["All workspaces", "Current workspace", "Current monitor"]
-        currentIndex: Settings.scopes.indexOf(root.values.scope)
-        onActivated: root.changed("scope", Settings.scopes[index])
+        value: root.values.scope
+        options: [
+          { value: "all", label: "All workspaces" },
+          { value: "workspace", label: "Current workspace" },
+          { value: "monitor", label: "Current monitor" }
+        ]
+        onChanged: function(value) { root.changed("scope", value) }
       }
       Repeater {
         model: [
@@ -66,11 +68,13 @@ ScrollView {
           { key: "livePreview", label: "Live preview" },
           { key: "contentSearch", label: "Search window contents" }
         ]
-        delegate: CheckBox {
+        delegate: Ui.Toggle {
           required property var modelData
-          text: modelData.label
-          checked: root.values[modelData.key]
-          onToggled: root.changed(modelData.key, checked)
+          width: parent.width
+          label: modelData.label
+          Accessible.name: modelData.label
+          checked: !!root.values[modelData.key]
+          onClicked: root.changed(modelData.key, !checked)
         }
       }
     }
@@ -90,19 +94,25 @@ ScrollView {
       font.family: Style.font.menuFamily
       font.pixelSize: Style.font.body
     }
-    Button {
+    Ui.Button {
+      focusable: true
+      bordered: true
       visible: root.bindingState !== null && !root.bindingState.managed && !root.bindingState.handWritten
       enabled: !root.bindingsBusy
       text: root.bindingsBusy ? "Checking bindings…" : "Set up Alt+Tab"
       onClicked: root.setupRequested()
     }
-    Button {
+    Ui.Button {
+      focusable: true
+      bordered: true
       visible: !!root.bindingState?.managed
       enabled: !root.bindingsBusy
       text: root.bindingsBusy ? "Checking bindings…" : "Remove OmaSwitch bindings"
       onClicked: root.removeRequested()
     }
-    Button {
+    Ui.Button {
+      focusable: true
+      bordered: true
       visible: root.bindingsError !== "" || (root.bindingsLoaded && root.bindingState === null)
       text: "Manual setup steps"
       onClicked: Qt.openUrlExternally("https://github.com/piyush97/omaswitch#setup")
@@ -124,7 +134,9 @@ ScrollView {
         color: Commons.Color.menu.text
         text: Bindings.appScopeLine()
       }
-      Button {
+      Ui.Button {
+        focusable: true
+        bordered: true
         text: "Copy"
         onClicked: { appBinding.selectAll(); appBinding.copy(); appBinding.deselect() }
       }

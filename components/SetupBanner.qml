@@ -1,7 +1,7 @@
 import QtQuick
-import QtQuick.Controls
 import qs.Commons
 import qs.Commons as Commons
+import qs.Ui as Ui
 
 Column {
   id: root
@@ -24,18 +24,21 @@ Column {
   Flow {
     width: parent.width
     spacing: Style.space(4)
-    Button {
+    Ui.Button {
+      bordered: true
       visible: !root.missing
       enabled: !root.busy
       text: root.busy ? "Checking bindings…" : "Use OmaSwitch for Alt+Tab"
       onClicked: root.setupRequested()
     }
-    Button {
+    Ui.Button {
+      bordered: true
       visible: root.missing || root.error !== ""
       text: "Manual setup steps"
       onClicked: Qt.openUrlExternally("https://github.com/piyush97/omaswitch#setup")
     }
-    Button {
+    Ui.Button {
+      bordered: true
       text: "Not now"
       enabled: !root.busy
       onClicked: root.dismissed()
