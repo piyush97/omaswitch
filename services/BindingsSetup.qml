@@ -43,8 +43,15 @@ QtObject {
     id: bindingsFile
     path: root.path
     printErrors: false
-    onLoaded: { root.original = text(); root.missing = false }
-    onLoadFailed: { root.original = null; root.missing = true }
+    // A rollback restores the exact bytes it saw, so its error stays until
+    // the file changes on disk or disappears; then it no longer applies.
+    onLoaded: {
+      var next = text()
+      if (root.original !== null && next !== root.original) root.error = ""
+      root.original = next
+      root.missing = false
+    }
+    onLoadFailed: { root.error = ""; root.original = null; root.missing = true }
   }
 
   property Process runner: Process {
