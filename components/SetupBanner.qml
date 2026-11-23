@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import qs.Commons
+import qs.Commons as Commons
 
 Column {
   id: root
@@ -16,7 +17,7 @@ Column {
     wrapMode: Text.Wrap
     textFormat: Text.PlainText
     text: root.error || (root.missing ? "Add the bindings from the README to ~/.config/hypr/bindings.lua." : "Alt+Tab still opens Omarchy's switcher.")
-    color: Color.menu.text
+    color: Commons.Color.menu.text
     font.family: Style.font.menuFamily
     font.pixelSize: Style.font.body
   }

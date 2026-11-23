@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 
 Item {
   id: root
@@ -17,7 +18,7 @@ Item {
     verticalAlignment: Text.AlignVCenter
     text: query.text ? "Filter: " + query.text + (root.searching ? " · searching contents…" : "") : "Switch window…"
     textFormat: Text.PlainText
-    color: Color.menu.text
+    color: Commons.Color.menu.text
     font.family: Style.font.menuFamily
     font.pixelSize: Style.font.title
     elide: Text.ElideRight
@@ -35,7 +36,7 @@ Item {
         width: Style.space(32)
         height: width
         radius: Style.cornerRadius
-        color: mouse.containsMouse ? Color.menu.selectedBackground : "transparent"
+        color: mouse.containsMouse ? Commons.Color.menu.selectedBackground : "transparent"
         Accessible.role: Accessible.Button
         Accessible.name: modelData.label
         Accessible.onPressAction: activate()
@@ -46,7 +47,7 @@ Item {
         Text {
           anchors.centerIn: parent
           text: parent.modelData.glyph
-          color: mouse.containsMouse ? Color.menu.selectedText : Color.menu.text
+          color: mouse.containsMouse ? Commons.Color.menu.selectedText : Commons.Color.menu.text
           font.family: Style.font.menuFamily
           font.pixelSize: Style.font.title
         }

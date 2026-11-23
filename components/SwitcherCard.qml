@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 BorderSurface {
@@ -15,8 +16,8 @@ BorderSurface {
   width: displayedCardWidth
   height: displayedCardHeight
   radius: Style.cornerRadius
-  color: Color.menu.background
-  borderSpec: Border.surfaceSpec("menu", "border", Color.menu.border, Math.max(1, Style.space(2)))
+  color: Commons.Color.menu.background
+  borderSpec: Border.surfaceSpec("menu", "border", Commons.Color.menu.border, Math.max(1, Style.space(2)))
   transform: Scale {
     origin.x: root.width / 2
     origin.y: root.height / 2

@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import "../Model.js" as Model
 
 Item {
@@ -22,12 +23,12 @@ Item {
     return escapeText(parts.before) + "<b><u>" + escapeText(parts.match) + "</u></b>" + escapeText(parts.after)
   }
   signal activated()
-  readonly property color foreground: selected ? Color.menu.selectedText : Color.menu.text
+  readonly property color foreground: selected ? Commons.Color.menu.selectedText : Commons.Color.menu.text
 
   Rectangle {
     anchors.fill: parent
     radius: Style.cornerRadius
-    color: root.selected ? Color.menu.selectedBackground : "transparent"
+    color: root.selected ? Commons.Color.menu.selectedBackground : "transparent"
   }
   Rectangle {
     visible: root.selected
