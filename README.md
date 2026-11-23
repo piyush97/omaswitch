@@ -111,6 +111,14 @@ Hyprland handles global bindings before OmaSwitch. If it already reserves `Alt+1
 | `Enter` or click | Focus the selected window |
 | `Esc` or click outside | Close without switching |
 
+### Omit windows
+
+To hide windows from the switcher, such as tray apps like `pcloud.bin`, create `~/.config/omarchy/omaswitch-omit.json` with an `omit` list of patterns. Each pattern is a case-insensitive regular expression matched against the window's app ID (or class) and its title. Changes apply as soon as you save the file.
+
+```json
+{ "omit": ["^pcloud", "^Picture-in-Picture$"] }
+```
+
 ## Searching window contents
 
 Type at least three characters. Title, app, and workspace matches appear instantly; OmaSwitch then scans your open windows one at a time and adds content matches as they arrive (the header shows *searching contents…* while it works).

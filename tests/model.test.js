@@ -153,7 +153,7 @@ for (const event of ["Inserted", "Removed"])
 assert.match(ocrIndexer, /onStreamFinished: \{\s*ocrProcess\.output = text\s*ocrProcess\.streamDone = true\s*ocrProcess\.maybeComplete\(\)/)
 assert.match(ocrIndexer, /visible: root\.enabled && root\.ocrCaptureSource !== null/)
 assert.match(qml, /\.map\(Model\.windowSnapshot\)/, "ListView rows must use scalar snapshots")
-assert.match(qml, /function refresh\(\) \{\s*allWindows = Model\.sortedWindows\(Model\.managedWindows\(Hyprland\.toplevels\.values\)/,
+assert.match(qml, /function refresh\(\) \{\s*var sorted = Model\.sortedWindows\(Model\.managedWindows\(Hyprland\.toplevels\.values\)[\s\S]*?allWindows = sorted\b/,
   "rows must skip stale workspace-less toplevels")
 const previewQml = fs.readFileSync(__dirname + "/../components/PreviewPane.qml", "utf8")
 assert.match(qml, /onObjectRemovedPre\(window\)[^}]*previewPane\.release\(/)

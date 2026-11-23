@@ -2,16 +2,11 @@
 
 All notable changes to OmaSwitch. Versions match `manifest.json` and the [GitHub releases](https://github.com/piyush97/omaswitch/releases).
 
-## [2.1.0]
-
-### Added
-
-- Omit windows from the switcher by app/class or title pattern, configured in `~/.config/omarchy/omaswitch-omit.json` (`omit` or `exclude` arrays) and reloaded live. ([#23](https://github.com/piyush97/omaswitch/issues/23))
-
 ## [2.0.0]
 
 ### Added
 
+- Omit windows from the switcher by app/class or title pattern, configured in `~/.config/omarchy/omaswitch-omit.json` (`omit` or `exclude` arrays) and reloaded live. ([#23](https://github.com/piyush97/omaswitch/issues/23))
 - Workspace groups, numbered results, and highlighted content snippets in the picker.
 - Same-app cycling with `Alt+Grave`, close with `Ctrl+W`, and move to the focused workspace with `Ctrl+M`.
 - Settings for window scope, grouping, live previews, and content search.

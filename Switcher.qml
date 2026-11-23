@@ -50,6 +50,7 @@ Item {
   property var allWindows: []
   property var rows: []
   property var omitPatterns: []
+  property bool focusedOmitted: false
 
   readonly property int headerHeight: Math.max(Style.space(34), Style.font.title + Style.spacing.controlPaddingY * 2)
   readonly property int rowHeight: Math.max(Style.space(48), Style.font.body + Style.font.caption + Style.spacing.rowPaddingX * 2)
@@ -101,7 +102,11 @@ Item {
   }
 
   function refresh() {
-    allWindows = Model.sortedWindows(Model.managedWindows(Hyprland.toplevels.values), root.mruAddresses)
+    var sorted = Model.sortedWindows(Model.managedWindows(Hyprland.toplevels.values), root.mruAddresses)
+    root.focusedOmitted = sorted.some(function(window) {
+      return Model.isCurrent(window) && Model.excluded(window, root.omitPatterns)
+    })
+    allWindows = sorted
       .filter(function(window) { return !Model.excluded(window, root.omitPatterns) })
       .map(Model.windowSnapshot)
     rebuildRows()
@@ -293,10 +298,12 @@ Item {
       root.cycleApp = Model.appId(root.allWindows[0])
       root.rebuildRows()
     }
-    // rows[0] is the focused window by construction, so its neighbour is
-    // always a genuine switch target.
-    if (root.cycleMode && root.rows.length > 1)
-      root.selectedIndex = direction < 0 ? root.rows.length - 1 : 1
+    // rows[0] is the focused window by construction, so its neighbour is the
+    // first switch target. An omitted focused window has no row; then rows[0]
+    // is already the previous window.
+    var firstTarget = root.focusedOmitted ? 0 : 1
+    if (root.cycleMode && root.rows.length > firstTarget)
+      root.selectedIndex = direction < 0 ? root.rows.length - 1 : firstTarget
 
     root.geometryAnimationsReady = false
     root.opened = true
