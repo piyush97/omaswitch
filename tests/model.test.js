@@ -485,6 +485,12 @@ assert.equal(Model.appCycleIndex(soloRows, 0, 1), 0)
 assert.deepEqual(Model.titleMatch({ title: "GitHub - Pull" }, "hub"), { before: "Git", match: "Hub", after: " - Pull" })
 assert.equal(Model.titleMatch({ title: "x" }, ""), null)
 assert.deepEqual(Model.titleMatch({ title: "İ GitHub" }, "hub"), { before: "İ Git", match: "Hub", after: "" })
+// Typing a plain "i" must find "İ": its default lowercase is "i" + U+0307.
+const dotted = { title: "İstanbul probe", lastIpcObject: { class: "kitty" } }
+assert.deepEqual(Model.filteredWindows([dotted], "istanbul"), [dotted], "a plain i must match a dotted capital İ")
+assert.deepEqual(Model.titleMatch(dotted, "istanbul"), { before: "", match: "İstanbul", after: " probe" })
+assert.deepEqual(rounded(Model.ocrHighlights(visualOnly, "izmir", { abc: Model.parseOcrTsv(dottedTsv) })),
+  [{ x: 0.12, y: 0.1, w: 0.1, h: 0.04 }], "OCR boxes must find İ words from a plain i query")
 
 // moveHereLua and closeTarget
 assert.match(Model.moveHereLua({ address: "0xabc", workspace: { id: 3 } }, 1), /hl\.dsp\.window\.move\(\{ workspace = '1', follow = false, window = 'address:0xabc' \}\)/)

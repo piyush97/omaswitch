@@ -175,18 +175,25 @@ function sortedWindows(values, rankFn) {
   return result
 }
 
+// Case-fold for search. "İ" (U+0130) is the only character whose lowercase
+// grows ("i" + U+0307), so "istanbul" would never match "İstanbul". Mapping
+// it to "I" first keeps every character's folded length at 1:1.
+function fold(text) {
+  return String(text || "").replace(/İ/g, "I").toLowerCase()
+}
+
 function filteredWindows(values, query, ocrTextByAddress) {
-  var q = String(query || "").trim().toLowerCase()
+  var q = fold(String(query || "").trim())
   if (!q) return values.slice()
   return values.filter(function(window) {
-    return metadataMatches(window, q) || ocrText(ocrTextByAddress, window).toLowerCase().indexOf(q) !== -1
+    return metadataMatches(window, q) || fold(ocrText(ocrTextByAddress, window)).indexOf(q) !== -1
   })
 }
 
 function metadataMatches(window, q) {
   var metadata = String(window && window.title || "") + " " + appId(window)
   if (window && window.workspace) metadata += " ws " + String(window.workspace.id)
-  return metadata.toLowerCase().indexOf(q) !== -1
+  return fold(metadata).indexOf(q) !== -1
 }
 
 function ocrEntry(ocrByAddress, window) {
@@ -227,18 +234,16 @@ function parseOcrTsv(tsv) {
 
 // Boxes for OCR-only matches; metadata matches already explain themselves.
 function ocrHighlights(window, query, ocrByAddress) {
-  var q = String(query || "").trim().toLowerCase()
+  var q = fold(String(query || "").trim())
   var entry = ocrEntry(ocrByAddress, window)
   if (!q || !entry || !entry.lines || metadataMatches(window, q)) return []
   var boxes = []
   for (var i = 0; i < entry.lines.length && boxes.length < 24; i++) {
-    // Lowercase per word before measuring spans: toLowerCase() can change
-    // length (for example "İ" becomes two code units), which would shift
-    // every later span away from the match index.
+    // Fold per word before measuring spans so each span indexes the folded line.
     var line = entry.lines[i], lower = "", spans = []
     for (var j = 0; j < line.length; j++) {
       if (j) lower += " "
-      var word = line[j].text.toLowerCase()
+      var word = fold(line[j].text)
       spans.push({ start: lower.length, end: lower.length + word.length })
       lower += word
     }
@@ -295,14 +300,14 @@ function scopedWindows(windows, scope, ctx) {
   return source
 }
 
-// Map the lowercase match back to complete characters in the original text.
+// Map the folded match back to complete characters in the original text.
 function splitMatch(text, query) {
   if (!query) return null
-  var at = text.toLowerCase().indexOf(query)
+  var at = fold(text).indexOf(query)
   if (at < 0) return null
   var start = 0, end = 0, foldedEnd = 0
   for (var char of text) {
-    foldedEnd += char.toLowerCase().length
+    foldedEnd += fold(char).length
     end += char.length
     if (foldedEnd <= at) start = end
     if (foldedEnd >= at + query.length) break
@@ -311,7 +316,7 @@ function splitMatch(text, query) {
 }
 
 function titleMatch(window, query) {
-  return splitMatch(label(window), String(query || "").trim().toLowerCase())
+  return splitMatch(label(window), fold(String(query || "").trim()))
 }
 
 // Build rows for display: headers (kind: "header", workspaceId, label) and windows
@@ -408,7 +413,7 @@ function clampSelection(rows, index) {
 
 // Return a bounded excerpt of the OCR line that matched the query.
 function matchSnippet(window, query, ocrByAddress, maxLength) {
-  var q = String(query || "").trim().toLowerCase()
+  var q = fold(String(query || "").trim())
   if (!q || metadataMatches(window, q)) return null
   var lines = ocrText(ocrByAddress, window).split("\n")
   for (var line of lines) {
