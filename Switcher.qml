@@ -7,23 +7,7 @@ import qs.Commons
 import qs.Ui
 import "Model.js" as Model
 import "services"
-
-// Keyboard-first window switcher overlay with a live window peek.
-//
-// Opened with `omarchy-shell shell toggle piyush.omaswitch` (bind it to
-// a key in ~/.config/hypr/bindings.lua). Lists Hyprland toplevels from the
-// Quickshell Hyprland singleton, filters live as you type, and focuses the
-// selection through the native Wayland toplevel API, with hyprctl as fallback.
-//
-// The right side shows a live preview (Windows-11-style "peek") of the
-// highlighted window via two alternating ScreencopyViews. The current frame
-// stays visible while the standby view starts the next capture, then swaps only
-// after the new frame is ready.
-// Two preview views handle smooth handoff; one extra capture runs only during
-// local OCR search. No capture view is created per window. If the
-// compositor lacks the hyprland-toplevel-export protocol (or the view gets
-// no frames), the preview pane stays reserved but empty — the list width
-// does not jump while captures load or swap between windows.
+import "components"
 
 Item {
   id: root
@@ -63,24 +47,8 @@ Item {
   // rebuildRows() gets to clamp selectedIndex.
   readonly property HyprlandToplevel selectedToplevel: root.opened && selectedIndex >= 0 && selectedIndex < rows.length
     ? Model.windowForAddress(Hyprland.toplevels.values, rows[selectedIndex].address) : null
-  property bool previewAvailable: false
-  property Toplevel previewSourceA: null
-  property Toplevel previewSourceB: null
-  property int activePreview: -1
-  property int pendingPreview: -1
-  readonly property Toplevel previewTarget: root.opened && root.selectedToplevel && root.selectedToplevel.wayland
-    ? root.selectedToplevel.wayland : null
-  // Reserve the preview pane as soon as a capturable window is selected.
-  // This keeps card geometry stable while the first screencopy frame arrives.
+  readonly property Toplevel previewTarget: root.selectedToplevel ? root.selectedToplevel.wayland : null
   readonly property bool previewLayout: root.opened && root.previewTarget !== null
-
-  onPreviewTargetChanged: {
-    if (!previewTarget) {
-      root.resetPreview()
-      return
-    }
-    root.queuePreview(previewTarget)
-  }
 
   readonly property int cardWidth: Math.min(root.previewLayout ? Style.space(1080) : Style.space(760), panel.width - Style.gapsOut * 2)
   readonly property int desiredListHeight: Math.max(root.rowHeight, rows.length * root.rowHeight)
@@ -99,14 +67,10 @@ Item {
   readonly property int previewConstraintHeight: Math.max(1, Math.min(Style.space(360), panel.height - Style.gapsOut * 2 - root.contentMargin * 2))
 
   property color background: Color.menu.background
-  property color foreground: Color.menu.text
   property color border: Color.menu.border
   property var borderSpec: Border.surfaceSpec("menu", "border", border, Math.max(1, Style.space(2)))
   property color scrim: Color.menu.scrim
-  property color selectedBackground: Color.menu.selectedBackground
-  property color selectedText: Color.menu.selectedText
   readonly property int cornerRadius: Style.cornerRadius
-  property string fontFamily: Style.font.menuFamily
 
   function scheduleCardGeometrySync() {
     if (root.geometrySyncQueued) return
@@ -133,7 +97,7 @@ Item {
     root.displayedCardWidth = nextWidth
     root.displayedCardHeight = nextHeight
 
-    if (!root.geometryAnimationsReady) {
+    if (!root.geometryAnimationsReady || Style.reduceMotion) {
       root.cardXScale = 1
       root.cardYScale = 1
       return
@@ -166,100 +130,6 @@ Item {
     to: 1
     duration: 110
     easing.type: Easing.OutCubic
-  }
-
-  function cancelPendingPreview() {
-    var index = root.pendingPreview
-    root.pendingPreview = -1
-    previewCaptureTimeout.stop()
-    if (index === 0) root.previewSourceA = null
-    else if (index === 1) root.previewSourceB = null
-  }
-
-  function resetPreview() {
-    root.cancelPendingPreview()
-    root.previewSourceA = null
-    root.previewSourceB = null
-    root.activePreview = -1
-    root.previewAvailable = false
-  }
-
-  Timer {
-    id: previewCaptureTimeout
-    interval: 300
-    onTriggered: {
-      var source = root.pendingPreview === 0 ? root.previewSourceA : root.previewSourceB
-      root.cancelPendingPreview()
-      if (root.opened && root.previewTarget && root.previewTarget !== source) {
-        Qt.callLater(function() {
-          if (root.opened) root.queuePreview(root.previewTarget)
-        })
-      }
-    }
-  }
-
-  function queuePreview(source) {
-    if (!root.opened || !source) return
-
-    // Already showing the requested source.
-    if (root.activePreview === 0 && root.previewSourceA === source) return
-    if (root.activePreview === 1 && root.previewSourceB === source) return
-
-    // Never retarget a ScreencopyView while it is waiting for a frame.
-    // previewTarget still tracks newer selections; previewReady() will discard
-    // this frame if it became stale and then queue only the newest target.
-    if (root.pendingPreview >= 0) return
-
-    var next = root.activePreview === 0 ? 1 : 0
-    if (root.activePreview < 0) next = 0
-
-    // Ping-pong buffers retain their previous frames. If the requested window
-    // is already sitting in the standby buffer, assigning the same
-    // captureSource again is a no-op and no hasContentChanged signal will fire.
-    // Promote that already-ready frame immediately instead.
-    if (next === 0 && root.previewSourceA === source && previewViewA.hasContent) {
-      root.activePreview = 0
-      root.previewAvailable = true
-      return
-    }
-    if (next === 1 && root.previewSourceB === source && previewViewB.hasContent) {
-      root.activePreview = 1
-      root.previewAvailable = true
-      return
-    }
-
-    root.pendingPreview = next
-    previewCaptureTimeout.restart()
-    if (next === 0)
-      root.previewSourceA = source
-    else
-      root.previewSourceB = source
-  }
-
-  function previewReady(index) {
-    if (root.pendingPreview !== index) return
-
-    var source = index === 0 ? root.previewSourceA : root.previewSourceB
-    if (!source) return
-
-    if (source !== root.previewTarget) {
-      // The capture completed for an older selection. Do not show it and do
-      // not retarget from inside this hasContent callback. Clear the in-flight
-      // state first, then queue the latest selection on the next event turn.
-      root.cancelPendingPreview()
-      Qt.callLater(function() {
-        if (root.opened)
-          root.queuePreview(root.previewTarget)
-      })
-      return
-    }
-
-    // Swap only after the currently selected source has a frame. Keep the
-    // previous buffer alive behind it as standby for the next selection.
-    root.activePreview = index
-    root.pendingPreview = -1
-    previewCaptureTimeout.stop()
-    root.previewAvailable = true
   }
 
   function rebuildRows() {
@@ -370,7 +240,7 @@ Item {
     var generation = root.openGeneration
     root.pendingFocus = null
     pendingFocusBackstop.stop()
-    root.resetPreview()
+    previewPane.resetPreview()
     ocrIndexer.reset()
     root.cycleMode = payload.mode === "cycle"
     root.filterText = ""
@@ -401,7 +271,7 @@ Item {
     root.geometryAnimationsReady = false
     root.opened = false
     root.cycleMode = false
-    root.resetPreview()
+    previewPane.resetPreview()
     ocrIndexer.reset()
     root.rows = []
     root.allWindows = []
@@ -419,8 +289,7 @@ Item {
     function onObjectRemovedPre(window) {
       ocrIndexer.reset()
       var source = window ? window.wayland : null
-      if (root.selectedToplevel === window || root.previewSourceA === source || root.previewSourceB === source)
-        root.resetPreview()
+      previewPane.release(source)
     }
     function onObjectInsertedPost() {
       if (root.opened) {
@@ -481,7 +350,7 @@ Item {
     interval: 0
     onTriggered: {
       if (root.opened && root.selectedIndex >= 0 && root.selectedIndex < root.rows.length)
-        listView.positionViewAtIndex(root.selectedIndex, ListView.Contain)
+        listView.reveal(root.selectedIndex)
     }
   }
 
@@ -545,183 +414,39 @@ Item {
           height: parent.height
           spacing: root.listGap
 
-          Text {
-            text: root.filterText === "" ? "Switch window…" :
-              "Filter: " + root.filterText + (ocrIndexer.searching ? " · searching contents…" : "")
-            color: root.foreground
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.title
-            elide: Text.ElideRight
+          SearchField {
             width: parent.width
+            height: root.headerHeight
+            text: root.filterText
+            searching: ocrIndexer.searching
           }
 
-          ListView {
+          WindowList {
             id: listView
             width: parent.width
             height: root.listHeight
-            model: root.rows
-            clip: true
-
-            Text {
-              parent: listView
-              anchors.centerIn: parent
-              visible: root.rows.length === 0
-              text: ocrIndexer.searching ? "Searching window contents…" :
-                (root.filterText ? "No matching windows" : "No windows")
-              color: root.foreground
-              opacity: 0.6
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-            }
-
-            delegate: Item {
-              width: listView.width
-              height: root.rowHeight
-
-              Rectangle {
-                anchors.fill: parent
-                radius: root.cornerRadius
-                color: index === root.selectedIndex ? root.selectedBackground : "transparent"
-              }
-
-              Row {
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.left: parent.left
-                anchors.leftMargin: Style.space(10)
-                width: parent.width - Style.space(20)
-                spacing: Style.space(8)
-
-                Image {
-                  width: Style.space(30)
-                  height: Style.space(30)
-                  anchors.verticalCenter: parent.verticalCenter
-                  fillMode: Image.PreserveAspectFit
-                  sourceSize.width: width * Screen.devicePixelRatio
-                  sourceSize.height: height * Screen.devicePixelRatio
-                  source: root.iconSource(modelData)
-                  asynchronous: true
-                }
-
-                Column {
-                  width: parent.width - Style.space(38)
-                  spacing: 2
-
-                  Text {
-                    text: Model.label(modelData)
-                    textFormat: Text.PlainText
-                    color: index === root.selectedIndex ? root.selectedText : root.foreground
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.body
-                    elide: Text.ElideRight
-                    width: parent.width
-                  }
-                  Text {
-                    text: Model.detail(modelData)
-                    textFormat: Text.PlainText
-                    color: index === root.selectedIndex ? root.selectedText : root.foreground
-                    opacity: 0.6
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.caption
-                    elide: Text.ElideRight
-                    width: parent.width
-                  }
-                }
-              }
-
-              MouseArea {
-                anchors.fill: parent
-                onClicked: { root.selectedIndex = index; root.focusSelected() }
-              }
-            }
+            rows: root.rows
+            rowHeight: root.rowHeight
+            selectedIndex: root.selectedIndex
+            iconSource: root.iconSource
+            emptyText: ocrIndexer.searching ? "Searching window contents…" :
+              (root.filterText ? "No matching windows" : "No windows")
+            onActivated: function(index) { root.selectedIndex = index; root.focusSelected() }
           }
         }
 
         // Right-side peek pane. Space is reserved while a previewable window is
         // selected; the capture view fades in once frames arrive.
-        BorderSurface {
+        PreviewPane {
           id: previewPane
           visible: root.previewLayout
           width: root.previewWidth
           height: parent.height
-          radius: root.cornerRadius
-          color: Qt.rgba(0, 0, 0, 0.25)
-          property var previewBorderSpec: Border.surfaceSpec("popups", "border", root.border, Math.max(1, Style.space(1)))
-          borderSpec: Border.none()
-          clip: false
-
-          // Keep the capture inside the intended border bounds. The actual
-          // border is drawn explicitly as the last/highest-z child below, so
-          // screencopy rendering can never cover its top edge.
-          Item {
-            anchors.fill: parent
-            anchors.topMargin: Border.top(previewPane.previewBorderSpec)
-            anchors.rightMargin: Border.right(previewPane.previewBorderSpec)
-            anchors.bottomMargin: Border.bottom(previewPane.previewBorderSpec)
-            anchors.leftMargin: Border.left(previewPane.previewBorderSpec)
-            clip: true
-
-            ScreencopyView {
-              id: previewViewA
-              anchors.centerIn: parent
-              z: root.activePreview === 0 ? 1 : 0
-              opacity: root.activePreview === 0 ? 1 : 0
-              captureSource: root.previewSourceA
-              live: root.opened && root.previewSourceA !== null
-              paintCursor: false
-              constraintSize: Qt.size(
-                Math.min(root.previewConstraintWidth, parent.width),
-                Math.min(root.previewConstraintHeight, parent.height))
-              onHasContentChanged: if (hasContent) root.previewReady(0)
-            }
-
-            ScreencopyView {
-              id: previewViewB
-              anchors.centerIn: parent
-              z: root.activePreview === 1 ? 1 : 0
-              opacity: root.activePreview === 1 ? 1 : 0
-              captureSource: root.previewSourceB
-              live: root.opened && root.previewSourceB !== null
-              paintCursor: false
-              constraintSize: Qt.size(
-                Math.min(root.previewConstraintWidth, parent.width),
-                Math.min(root.previewConstraintHeight, parent.height))
-              onHasContentChanged: if (hasContent) root.previewReady(1)
-            }
-
-            // Where an OCR-only match was found, from Tesseract's layout boxes.
-            Item {
-              id: ocrHighlightLayer
-              readonly property ScreencopyView view: root.activePreview === 1 ? previewViewB : previewViewA
-              clip: true
-              x: view.x
-              y: view.y
-              width: view.width
-              height: view.height
-              z: 2
-              visible: root.previewAvailable && root.activePreview >= 0 && root.previewTarget === view.captureSource
-
-              Repeater {
-                model: root.previewHighlights
-                Rectangle {
-                  required property var modelData
-                  x: modelData.x * ocrHighlightLayer.width - 3
-                  y: modelData.y * ocrHighlightLayer.height - 2
-                  width: modelData.w * ocrHighlightLayer.width + 6
-                  height: modelData.h * ocrHighlightLayer.height + 4
-                  radius: 3
-                  color: Qt.rgba(root.selectedBackground.r, root.selectedBackground.g, root.selectedBackground.b, 0.25)
-                  border.color: root.selectedBackground
-                  border.width: 2
-                }
-              }
-            }
-          }
-
-          BorderOverlay {
-            anchors.fill: parent
-            radius: previewPane.radius
-            borderSpec: previewPane.previewBorderSpec
-          }
+          window: root.previewTarget
+          highlights: root.previewHighlights
+          captureEnabled: root.opened
+          previewConstraintWidth: root.previewConstraintWidth
+          previewConstraintHeight: root.previewConstraintHeight
         }
       }
     }

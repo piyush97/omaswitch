@@ -151,7 +151,9 @@ assert.match(ocrIndexer, /visible: root\.enabled && root\.ocrCaptureSource !== n
 assert.match(qml, /\.map\(Model\.windowSnapshot\)/, "ListView rows must use scalar snapshots")
 assert.match(qml, /function refresh\(\) \{\s*allWindows = Model\.sortedWindows\(Model\.managedWindows\(Hyprland\.toplevels\.values\)/,
   "rows must skip stale workspace-less toplevels")
-assert.match(qml, /onObjectRemovedPre\(window\)[\s\S]*?previewSourceA === source[\s\S]*?previewSourceB === source[\s\S]*?resetPreview\(\)/,
+const previewQml = fs.readFileSync(__dirname + "/../components/PreviewPane.qml", "utf8")
+assert.match(qml, /onObjectRemovedPre\(window\)[^}]*previewPane\.release\(/)
+assert.match(previewQml, /function release\(source\)[^}]*previewSourceA === source[^}]*previewSourceB === source[^}]*resetPreview\(\)/,
   "capture sources must clear before any retained toplevel is destroyed")
 assert.match(qml, /function close\(\)[\s\S]*?root\.rows = \[\][\s\S]*?root\.allWindows = \[\]/,
   "closing the overlay must release all row snapshots")
@@ -208,9 +210,9 @@ for (const [width, height, dpr, expectedWidth, expectedHeight] of [
   assert.deepEqual([Math.round(target.width * dpr), Math.round(target.height * dpr)], [expectedWidth, expectedHeight],
     "OCR capture must enlarge small glyphs, preserve aspect ratio, and bound physical pixels independently of display scaling")
 }
-const timeoutHandler = qml.match(/id: previewCaptureTimeout[\s\S]*?onTriggered: \{([\s\S]*?)^    \}/m)
+const timeoutHandler = previewQml.match(/id: previewCaptureTimeout[\s\S]*?onTriggered: \{([\s\S]*?)^    \}/m)
 assert.ok(timeoutHandler, "pending preview captures must have bounded cancellation")
-const targetHandler = qml.match(/^  onPreviewTargetChanged: \{([\s\S]*?)^  \}/m)
+const targetHandler = previewQml.match(/^  onPreviewTargetChanged: \{([\s\S]*?)^  \}/m)
 assert.ok(targetHandler)
 const root = {
   opened: true, previewTarget: null, previewSourceA: null, previewSourceB: null,
@@ -230,7 +232,7 @@ const context = vm.createContext({
 })
 Object.defineProperty(context, "previewTarget", { get: function() { return root.previewTarget } })
 for (const name of ["queuePreview", "previewReady", "cancelPendingPreview", "resetPreview"]) {
-  const handler = qml.match(new RegExp("^  function " + name + "\\([^)]*\\) \\{[\\s\\S]*?^  \\}", "m"))
+  const handler = previewQml.match(new RegExp("^  function " + name + "\\([^)]*\\) \\{[\\s\\S]*?^  \\}", "m"))
   assert.ok(handler, name)
   root[name] = vm.runInContext("(" + handler[0] + ")", context)
 }
