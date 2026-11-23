@@ -107,11 +107,15 @@ QtObject {
       String(Date.now()) + "-" + String(root.ocrCaptureSerial) + "-" +
       Math.random().toString(36).slice(2) + ".png"
     root.ocrImagePath = path
-    // Enlarge small glyphs without downsampling 4K captures; bound the long edge.
-    // grabToImage multiplies its target by the host window's device pixel ratio.
+    // Render at 2x logical size (2x on scale 1, 1.33x on 1.5, 1x on 2): HiDPI
+    // buffers are already large, and upscaling them further makes Tesseract
+    // misread glyphs. Bound the long edge. grabToImage multiplies its target
+    // by the host window's device pixel ratio, which is fractional (1.5) where
+    // Screen.devicePixelRatio reports the rounded-up integer (2).
     var size = ocrCaptureView.sourceSize
-    var scale = Math.min(2, 7680 / Math.max(1, size.width, size.height)) /
-      ocrCaptureView.Screen.devicePixelRatio
+    var hostWindow = ocrCaptureView.Window && ocrCaptureView.Window.window
+    var dpr = (hostWindow && hostWindow.devicePixelRatio) || ocrCaptureView.Screen.devicePixelRatio
+    var scale = Math.min(2 / dpr, 7680 / Math.max(1, size.width, size.height)) / dpr
     var target = Qt.size(Math.max(1, Math.floor(size.width * scale)),
                          Math.max(1, Math.floor(size.height * scale)))
     var started = ocrCaptureView.grabToImage(function(result) {
