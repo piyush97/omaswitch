@@ -5,7 +5,7 @@
 [![Omarchy plugin](https://img.shields.io/badge/Omarchy-plugin-0f172a)](https://omarchyplugins.com/plugin.html?id=piyush.omaswitch)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**The `Alt+Tab` Omarchy was missing: recent windows first, live previews, and search by what's actually on screen.**
+**Find any open window by what's on screen.** Search titles, apps, workspaces, or visible text. Switch with a live preview, or use `Alt+Tab` to cycle recent windows.
 
 ![OmaSwitch showing a live terminal preview](preview.png)
 
@@ -23,6 +23,8 @@ OmaSwitch is a keyboard-first window switcher overlay for [Omarchy](https://omar
 - **Native to Omarchy.** Follows your active theme, uses app icons from your desktop entries, and needs no daemon, extra package, or elevated privilege.
 
 ## See it in action
+
+These screenshots show OmaSwitch v1. The v2 layout adds workspace groups, search snippets, and shortcut hints.
 
 **Pick the project window without leaving the keyboard.** Search or cycle, then confirm with `Enter`.
 
@@ -48,11 +50,21 @@ It installs into your user configuration. Nothing else is required — OCR uses 
 | `hyprland-toplevel-export-v1` | Live previews and OCR captures | Switching and title search still work; preview pane stays empty |
 | `tesseract` (bundled with Omarchy) | Search inside window contents | Title/app/workspace search still works |
 
-## Make it your Alt+Tab
+## Setup
 
-> **Installing does not change your keybindings.** Omarchy's default `Alt+Tab` cycles windows directly and will keep doing so until you replace it. This one-time step is what most "it doesn't open" reports come down to.
+Installing OmaSwitch leaves your keybindings alone. Open the picker:
 
-Add this to `~/.config/hypr/bindings.lua`:
+```bash
+omarchy-shell shell toggle piyush.omaswitch
+```
+
+Click **Use OmaSwitch for Alt+Tab** in the picker, or open **Settings** and click **Set up Alt+Tab**. OmaSwitch backs up `~/.config/hypr/bindings.lua`, writes its marked block, and reloads Hyprland. If the reload fails or reports new errors, OmaSwitch attempts to restore the backup. Review any error in the picker before retrying.
+
+### Manual setup
+
+If you already bind OmaSwitch by hand, keep your bindings. To add same-app cycling, copy the `ALT + GRAVE` line from **Settings** and check that the key is free first.
+
+To set up all three shortcuts yourself, back up `~/.config/hypr/bindings.lua`, then add:
 
 ```lua
 hl.unbind("ALT + TAB")
@@ -60,6 +72,7 @@ hl.unbind("ALT + SHIFT + TAB")
 
 o.bind("ALT + TAB", "OmaSwitch", "omarchy-shell shell summon piyush.omaswitch '{\"mode\":\"cycle\",\"direction\":1}'")
 o.bind("ALT + SHIFT + TAB", "OmaSwitch (reverse)", "omarchy-shell shell summon piyush.omaswitch '{\"mode\":\"cycle\",\"direction\":-1}'")
+o.bind("ALT + GRAVE", "OmaSwitch (same app)", "omarchy-shell shell summon piyush.omaswitch '{\"mode\":\"cycle\",\"scope\":\"app\",\"direction\":1}'")
 ```
 
 Reload and confirm there are no errors:
@@ -77,10 +90,19 @@ omarchy-shell shell toggle piyush.omaswitch
 
 ## Usage
 
+Open the picker to filter, preview, and switch. **Settings** lets you limit results to the current workspace or monitor, group picker results by workspace, or turn off previews and content search. Use `?` with an empty filter to show shortcuts.
+
+Hyprland handles global bindings before OmaSwitch. If it already reserves `Alt+1` through `Alt+9`, those keys may switch workspaces instead of jumping to rows.
+
 | Key | Action |
 | --- | --- |
 | `Alt+Tab` | Open and move to the next recent window |
 | `Alt+Shift+Tab` | Open and move backward |
+| `` Alt+` `` | Cycle windows within the same app if the binding is installed |
+| `Alt+1`–`Alt+9` | Switch to the numbered result |
+| `Ctrl+W` | Ask the selected window to close; keep the picker open |
+| `Ctrl+M` | Move the selected window to the focused workspace and switch to it |
+| `Ctrl+,` | Open picker settings |
 | `Tab`, `↓`, `→` | Next window |
 | `Shift+Tab`, `↑`, `←` | Previous window |
 | Type | Filter by title, app, workspace, or visible text |
@@ -122,7 +144,7 @@ omarchy plugin disable piyush.omaswitch
 omarchy plugin remove piyush.omaswitch --yes
 ```
 
-If you added the `Alt+Tab` bindings above, remove them from `bindings.lua` too, or `Alt+Tab` will do nothing.
+Before disabling or removing OmaSwitch, open **Settings** and click **Remove OmaSwitch bindings**. If you added the bindings by hand, remove those lines from `~/.config/hypr/bindings.lua` and reload Hyprland instead. Otherwise `Alt+Tab` may still try to open the removed plugin.
 
 ## Troubleshooting
 

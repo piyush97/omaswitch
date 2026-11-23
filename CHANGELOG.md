@@ -2,6 +2,20 @@
 
 All notable changes to OmaSwitch. Versions match `manifest.json` and the [GitHub releases](https://github.com/piyush97/omaswitch/releases).
 
+## [2.0.0]
+
+### Added
+
+- Workspace groups, numbered results, and highlighted content snippets in the picker.
+- Same-app cycling with `Alt+Grave`, close with `Ctrl+W`, and move to the focused workspace with `Ctrl+M`.
+- Settings for window scope, grouping, live previews, and content search.
+- Opt-in `Alt+Tab` setup and removal with backups and rollback on reload errors.
+
+### Changed
+
+- Open the switcher on the focused monitor.
+- Split picker UI and capture services into separate components, with regression tests for window selection and binding updates.
+
 ## [1.3.3] — 2026-11-21
 
 ### Fixed

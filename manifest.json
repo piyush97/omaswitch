@@ -2,10 +2,11 @@
   "schemaVersion": 1,
   "id": "piyush.omaswitch",
   "name": "OmaSwitch",
-  "version": "1.3.3",
+  "version": "2.0.0",
   "author": "piyush97",
   "license": "MIT",
-  "description": "Alt-Tab overlay with MRU ordering, live previews, and local OCR search.",
+  "description": "Find any open window by what’s on screen.",
+  "preview": "preview.png",
   "kinds": [
     "overlay"
   ],
