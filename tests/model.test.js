@@ -153,7 +153,7 @@ for (const event of ["Inserted", "Removed"])
 assert.match(ocrIndexer, /onStreamFinished: \{\s*ocrProcess\.output = text\s*ocrProcess\.streamDone = true\s*ocrProcess\.maybeComplete\(\)/)
 assert.match(ocrIndexer, /visible: root\.enabled && root\.ocrCaptureSource !== null/)
 assert.match(qml, /\.map\(Model\.windowSnapshot\)/, "ListView rows must use scalar snapshots")
-assert.match(qml, /function refresh\(\) \{\s*allWindows = Model\.sortedWindows\(Model\.managedWindows\(Hyprland\.toplevels\.values\)/,
+assert.match(qml, /function refresh\(\) \{\s*var sorted = Model\.sortedWindows\(Model\.managedWindows\(Hyprland\.toplevels\.values\)[\s\S]*?allWindows = sorted\b/,
   "rows must skip stale workspace-less toplevels")
 const previewQml = fs.readFileSync(__dirname + "/../components/PreviewPane.qml", "utf8")
 assert.match(qml, /onObjectRemovedPre\(window\)[^}]*previewPane\.release\(/)
@@ -497,3 +497,17 @@ assert.match(Model.moveHereLua({ address: "0xabc", workspace: { id: 3 } }, 1), /
 assert.equal(Model.moveHereLua({ address: "0xabc", workspace: { id: 1 } }, 1), null)
 assert.equal(Model.moveHereLua({ address: "0xabc", workspace: { id: 1 } }, "not a workspace ID"), null)
 assert.equal(Model.closeTarget({}), null)
+
+// --- excluded: omit windows by app/class or title ---
+assert.equal(Model.excluded(active, []), false)
+assert.equal(Model.excluded(active, [/^chromium$/i]), true)
+assert.equal(Model.excluded(active, [/^foot$/i]), false)
+const pcloud = { title: "pCloud", wayland: { appId: "pcloud.bin" } }
+assert.equal(Model.excluded(pcloud, [/^pcloud/i]), true)
+assert.equal(Model.excluded(pcloud, [/^signal$/i]), false)
+assert.equal(Model.excluded(pcloud, [/pcloud\.bin$/i]), true)
+// A pattern matching only the title (not the appId) must still omit the window.
+assert.equal(Model.excluded({ title: "Signal", wayland: { appId: "org.signal.desktop" } }, [/^signal$/i]), true)
+// Matching is against the class too (X11 windows have no wayland appId).
+assert.equal(Model.excluded({ title: "Notes", lastIpcObject: { class: "obsidian" } }, [/^obsidian$/i]), true)
+assert.equal(Model.excluded(null, [/^chromium$/i]), false)

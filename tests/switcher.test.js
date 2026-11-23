@@ -34,3 +34,28 @@ test('digit shortcuts focus an on-screen window rather than indexing headers', (
   assert.match(qml, /Model\.windowRowIndex\(root\.rows,/)
   assert.match(qml, /Qt\.Key_1[^]*?Qt\.Key_9/)
 })
+
+test('omit patterns are watched and applied when refreshing', () => {
+  assert.match(qml, /!Model\.excluded\(window, root\.omitPatterns\)/)
+  assert.match(qml, /omaswitch-omit\.json/)
+  assert.match(qml, /watchChanges: true[\s\S]*?onFileChanged: reload\(\)/)
+})
+
+test('an omitted focused window makes Alt+Tab start at the first row', () => {
+  const vm = require('node:vm')
+  const Model = require('../Model.js')
+  const refresh = qml.match(/^  function refresh\(\) \{[\s\S]*?^  \}/m)
+  assert.ok(refresh)
+  const focusedTray = { address: '0xa', title: 'pCloud', activated: true, wayland: { appId: 'pcloud.bin' }, workspace: { id: 1 } }
+  const previous = { address: '0xb', title: 'Editor', activated: false, wayland: { appId: 'code' }, workspace: { id: 1 }, lastIpcObject: { focusHistoryID: 1 } }
+  const root = { mruAddresses: ['a', 'b'], omitPatterns: [/^pcloud/i] }
+  const context = vm.createContext({ root, Model, Hyprland: { toplevels: { values: [focusedTray, previous] } }, rebuildRows() {} })
+  vm.runInContext(refresh[0] + '\nrefresh()', context)
+  assert.equal(root.focusedOmitted, true)
+  assert.deepEqual(vm.runInContext('allWindows', context).map(w => w.title), ['Editor'])
+  root.omitPatterns = []
+  vm.runInContext('refresh()', context)
+  assert.equal(root.focusedOmitted, false, 'nothing omitted keeps the old cycle start')
+  assert.match(qml, /var firstTarget = root\.focusedOmitted \? 0 : 1/)
+  assert.match(qml, /root\.selectedIndex = direction < 0 \? root\.rows\.length - 1 : firstTarget/)
+})
