@@ -1,9 +1,11 @@
 import QtQuick
 import qs.Commons
+import "../Model.js" as Model
 
 ListView {
   id: root
   property var rows: []
+  property var closingAddresses: ({})
   property int selectedIndex: -1
   property int rowHeight: 48
   property var iconSource
@@ -49,6 +51,7 @@ ListView {
         icon: root.iconSource(row)
         snippet: root.snippetFor(row)
         query: root.query
+        closing: !!root.closingAddresses[Model.closeTarget(row)]
         height: root.rowHeight + (snippet ? Style.space(20) : 0)
         onActivated: root.activated(entry.index)
       }

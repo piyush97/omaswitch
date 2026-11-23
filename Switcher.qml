@@ -22,6 +22,7 @@ Item {
   property bool geometryAnimationsReady: false
   property bool cycleMode: false
   property string cycleApp: ""
+  property var closingAddresses: ({})
   property var mruAddresses: []
   property var pendingMruPromotions: []
   property string filterText: ""
@@ -160,6 +161,32 @@ Item {
     keepSelectionVisible.restart()
   }
 
+  function closeSelected() {
+    var address = Model.closeTarget(selectedWindow)
+    if (!address || closingAddresses[address]) return
+    var target = selectedToplevel
+    if (!target) return
+    closingAddresses = Object.assign({}, closingAddresses, { [address]: true })
+    if (target.wayland && typeof target.wayland.close === "function") target.wayland.close()
+    else Quickshell.execDetached(["hyprctl", "dispatch", "closewindow", "address:" + address])
+    closingBackstop.restart()
+  }
+
+  Timer {
+    id: closingBackstop
+    interval: 3000
+    onTriggered: root.closingAddresses = ({})
+  }
+
+  function moveSelectedHere() {
+    var workspace = Hyprland.focusedWorkspace
+    if (!workspace || !selectedToplevel) return
+    var command = Model.moveHereLua(selectedWindow, workspace.id)
+    if (!command) return
+    Hyprland.dispatch(command)
+    focusSelected()
+  }
+
   function jump(number) {
     var index = Model.windowRowIndex(root.rows, number)
     if (index < 0) return
@@ -227,6 +254,8 @@ Item {
     root.helpOpen = false
     root.cycleMode = false
     root.cycleApp = ""
+    root.closingAddresses = ({})
+    closingBackstop.stop()
     previewPane.resetPreview()
     ocrIndexer.reset()
     root.rows = []
@@ -376,6 +405,7 @@ Item {
             visible: !root.helpOpen || root.previewLayout
             height: visible ? root.listHeight : 0
             rows: root.rows
+            closingAddresses: root.closingAddresses
             rowHeight: root.rowHeight
             selectedIndex: root.selectedIndex
             iconSource: root.iconSource
@@ -390,7 +420,7 @@ Item {
             height: root.footerHeight
             cycleMode: root.cycleMode
             visible: root.footerHeight > 0
-            text: "Enter switch · Alt+1–9 jump · ? shortcuts"
+            text: "Enter switch · Ctrl+W close · Ctrl+M move · Alt+1–9 jump"
           }
         }
 
@@ -446,6 +476,12 @@ Item {
         } else if (event.key >= Qt.Key_1 && event.key <= Qt.Key_9 &&
                    (event.modifiers === Qt.AltModifier || (root.cycleMode && event.modifiers === Qt.NoModifier))) {
           root.jump(event.key - Qt.Key_0)
+          event.accepted = true
+        } else if (event.modifiers === Qt.ControlModifier && event.key === Qt.Key_W) {
+          root.closeSelected()
+          event.accepted = true
+        } else if (event.modifiers === Qt.ControlModifier && event.key === Qt.Key_M) {
+          root.moveSelectedHere()
           event.accepted = true
         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
           root.focusSelected()

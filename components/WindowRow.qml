@@ -6,6 +6,8 @@ Item {
   id: root
   required property var row
   property bool selected: false
+  property bool closing: false
+  opacity: closing ? 0.55 : 1
   property url icon
   property var jump: null
   property var snippet: null

@@ -466,4 +466,5 @@ assert.equal(Model.titleMatch({ title: "x" }, ""), null)
 // moveHereLua and closeTarget
 assert.match(Model.moveHereLua({ address: "0xabc", workspace: { id: 3 } }, 1), /hl\.dsp\.window\.move\(\{ workspace = '1', follow = false, window = 'address:0xabc' \}\)/)
 assert.equal(Model.moveHereLua({ address: "0xabc", workspace: { id: 1 } }, 1), null)
+assert.equal(Model.moveHereLua({ address: "0xabc", workspace: { id: 1 } }, "not a workspace ID"), null)
 assert.equal(Model.closeTarget({}), null)

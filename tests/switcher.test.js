@@ -4,6 +4,12 @@ const { readFileSync } = require('node:fs')
 const source = name => readFileSync(require('node:path').join(__dirname, '..', name), 'utf8')
 const qml = source('Switcher.qml')
 
+test('close and move target a selected window without shell interpolation', () => {
+  assert.match(qml, /Model\.closeTarget\(selectedWindow\)/)
+  assert.match(qml, /\["hyprctl", "dispatch", "closewindow", "address:" \+ address\]/)
+  assert.match(qml, /Model\.moveHereLua\(selectedWindow, workspace\.id\)/)
+})
+
 test('picker groups rows while cycling stays flat and selection skips headers', () => {
   assert.match(qml, /Model\.displayRows\([^]*?group: !cycleMode && pluginSettings\.values\.groupByWorkspace/)
   assert.match(qml, /Model\.clampSelection\(rows,/)

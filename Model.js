@@ -517,7 +517,7 @@ function moveHereLua(window, workspaceId) {
   var address = normalizeAddress(window && window.address)
   if (!address || !/^0x[0-9a-fA-F]+$/.test(address)) return null
   var currentWs = window && window.workspace && window.workspace.id
-  if (currentWs === workspaceId) return null
+  if (!Number.isSafeInteger(workspaceId) || currentWs === workspaceId) return null
   return "(function() hl.dispatch(hl.dsp.window.move({ workspace = '" + workspaceId + "', follow = false, window = 'address:" + address + "' })) end)"
 }
 
