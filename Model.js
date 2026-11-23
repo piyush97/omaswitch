@@ -295,19 +295,23 @@ function scopedWindows(windows, scope, ctx) {
   return source
 }
 
-// Match case-insensitive query in label(window), returning { before, match, after } or null.
-// Uses same Unicode-safe lowercasing as matchSnippet/ocrHighlights so indices map to original.
-function titleMatch(window, query) {
-  var q = String(query || "").trim().toLowerCase()
-  if (!q) return null
-  var title = label(window)
-  var idx = title.toLowerCase().indexOf(q)
-  if (idx === -1) return null
-  return {
-    before: title.substring(0, idx),
-    match: title.substring(idx, idx + q.length),
-    after: title.substring(idx + q.length)
+// Map the lowercase match back to complete characters in the original text.
+function splitMatch(text, query) {
+  if (!query) return null
+  var at = text.toLowerCase().indexOf(query)
+  if (at < 0) return null
+  var start = 0, end = 0, foldedEnd = 0
+  for (var char of text) {
+    foldedEnd += char.toLowerCase().length
+    end += char.length
+    if (foldedEnd <= at) start = end
+    if (foldedEnd >= at + query.length) break
   }
+  return { before: text.slice(0, start), match: text.slice(start, end), after: text.slice(end) }
+}
+
+function titleMatch(window, query) {
+  return splitMatch(label(window), String(query || "").trim().toLowerCase())
 }
 
 // Build rows for display: headers (kind: "header", workspaceId, label) and windows
@@ -402,97 +406,30 @@ function clampSelection(rows, index) {
   return windows[windows.length - 1]
 }
 
-// Return { before, match, after } snippet for OCR-only matches, or null.
-// Centers match; trims at word boundaries; adds … on trimmed sides; total ≤ maxLength.
-// Never splits surrogate pairs.
+// Return a bounded excerpt of the OCR line that matched the query.
 function matchSnippet(window, query, ocrByAddress, maxLength) {
   var q = String(query || "").trim().toLowerCase()
   if (!q || metadataMatches(window, q)) return null
-  var text = ocrText(ocrByAddress, window)
-  if (!text) return null
-  var entry = ocrEntry(ocrByAddress, window)
-  if (!entry) return null
-  var original = text
-  var lower = text.toLowerCase()
-  // Handle layout objects with per-word lowercasing
-  if (entry.lines && typeof entry.lines === "object" && entry.lines.length) {
-    // Build lowercased text per-word to find match index without shifting
-    lower = ""
-    var spans = []
-    for (var lineIdx = 0; lineIdx < entry.lines.length; lineIdx++) {
-      var line = entry.lines[lineIdx]
-      for (var wordIdx = 0; wordIdx < line.length; wordIdx++) {
-        if (lower && lower[lower.length - 1] !== "\n") lower += " "
-        var word = line[wordIdx].text.toLowerCase()
-        spans.push({ start: lower.length, end: lower.length + word.length, orig: line[wordIdx].text })
-        lower += word
-      }
-      if (lineIdx < entry.lines.length - 1) lower += "\n"
-    }
-    // Reconstruct original from spans
-    original = ""
-    for (var s = 0; s < spans.length; s++) {
-      original += spans[s].orig
-      if (s < spans.length - 1 && spans[s + 1].start > spans[s].end) original += " "
-    }
+  var lines = ocrText(ocrByAddress, window).split("\n")
+  for (var line of lines) {
+    var parts = splitMatch(line, q)
+    if (!parts) continue
+    var limit = maxLength === undefined ? 96 : Math.max(1, Math.floor(maxLength))
+    if (parts.match.length > limit)
+      return { before: "", match: clipSnippet(parts.match, limit, false), after: "" }
+    var room = limit - parts.match.length
+    var left = Math.min(parts.before.length, Math.max(Math.floor(room / 2), room - parts.after.length))
+    return { before: clipSnippet(parts.before, left, true), match: parts.match,
+             after: clipSnippet(parts.after, room - left, false) }
   }
-  var idx = lower.indexOf(q)
-  if (idx === -1) return null
-  var matchStart = idx
-  var matchEnd = idx + q.length
-  var ellipsis = "…"
-  // The match itself occupies matchEnd - matchStart chars in original.
-  // Total budget: maxLength. Reserve space for match + potential ellipses.
-  var matchLen = matchEnd - matchStart
-  var availableForContext = maxLength - matchLen
-  var ellipsisNeededBefore = matchStart > 0
-  var ellipsisNeededAfter = matchEnd < original.length
-  if (ellipsisNeededBefore) availableForContext -= ellipsis.length
-  if (ellipsisNeededAfter) availableForContext -= ellipsis.length
-  if (availableForContext < 0) availableForContext = 0
-  var beforeBudget = Math.floor(availableForContext / 2)
-  var afterBudget = availableForContext - beforeBudget
-  var beforeStart = Math.max(0, matchStart - beforeBudget)
-  var afterEnd = Math.min(original.length, matchEnd + afterBudget)
-  // Trim to word boundaries
-  while (beforeStart > 0 && beforeStart < matchStart && !/\s/.test(original[beforeStart - 1])) beforeStart--
-  while (afterEnd < original.length && afterEnd > matchEnd && !/\s/.test(original[afterEnd])) afterEnd++
-  var before = original.substring(beforeStart, matchStart)
-  var match = original.substring(matchStart, matchEnd)
-  var after = original.substring(matchEnd, afterEnd)
-  // Add ellipsis
-  if (beforeStart > 0) before = ellipsis + before.trimStart()
-  if (afterEnd < original.length) after = after.trimEnd() + ellipsis
-  // Ensure no surrogate splits
-  function isSurrogate(str, idx) {
-    if (idx < 0 || idx >= str.length) return false
-    var code = str.charCodeAt(idx)
-    return code >= 0xD800 && code <= 0xDFFF
-  }
-  if (before && isSurrogate(before, before.length - 1)) before = before.slice(0, -1)
-  if (match && isSurrogate(match, 0)) match = match.slice(1)
-  if (match && isSurrogate(match, match.length - 1)) match = match.slice(0, -1)
-  if (after && isSurrogate(after, 0)) after = after.slice(1)
-  // Final enforcement: truncate if total exceeds maxLength
-  var total = before.length + match.length + after.length
-  if (total > maxLength) {
-    var excess = total - maxLength
-    // Try trimming after first
-    if (after.length >= excess) {
-      after = after.substring(0, after.length - excess)
-      if (after && isSurrogate(after, after.length - 1)) after = after.slice(0, -1)
-    } else {
-      after = ""
-      excess -= after.length
-      if (before.length >= excess) {
-        before = before.substring(excess)
-        if (before && isSurrogate(before, 0)) before = before.slice(1)
-      } else {
-        before = ""
-      }
-    }
-  }
-  return { before: before, match: match, after: after }
+  return null
+}
+
+function clipSnippet(text, limit, keepEnd) {
+  if (text.length <= limit) return text
+  if (limit <= 0) return ""
+  if (keepEnd) return "…" + text.slice(text.length - limit + 1).replace(/^[\uDC00-\uDFFF]/, "")
+  return text.slice(0, limit - 1).replace(/[\uD800-\uDBFF]$/, "") + "…"
 }
 
 // Find next window row (wrapping) with same appId as rows[currentRowIndex].window.

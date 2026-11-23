@@ -453,6 +453,9 @@ assert.equal(Model.clampSelection([], 0), -1)
 const ocr = { abc: "Build log\n  npm ERR! code ERR_404_DATABASE while fetching 🙂 more text here" }
 assert.deepEqual(Model.matchSnippet(visualOnly, "err_404", ocr, 80).match, "ERR_404")
 assert.equal(Model.matchSnippet(active, "browser", ocr, 80), null)
+assert.deepEqual(Model.matchSnippet(visualOnly, "🙂", { abc: "Build log\nİ 🙂 done" }), {
+  before: "İ ", match: "🙂", after: " done"
+})
 const longSnippet = Model.matchSnippet(visualOnly, "fetching", { abc: "x".repeat(300) + " fetching " + "🙂".repeat(100) }, 40)
 assert.ok((longSnippet.before + longSnippet.match + longSnippet.after).length <= 40)
 assert.ok(!/[\uD800-\uDBFF]$/.test(longSnippet.before))
@@ -466,6 +469,7 @@ assert.equal(Model.appCycleIndex(soloRows, 0, 1), 0)
 // titleMatch
 assert.deepEqual(Model.titleMatch({ title: "GitHub - Pull" }, "hub"), { before: "Git", match: "Hub", after: " - Pull" })
 assert.equal(Model.titleMatch({ title: "x" }, ""), null)
+assert.deepEqual(Model.titleMatch({ title: "İ GitHub" }, "hub"), { before: "İ Git", match: "Hub", after: "" })
 
 // moveHereLua and closeTarget
 assert.match(Model.moveHereLua({ address: "0xabc", workspace: { id: 3 } }, 1), /hl\.dsp\.window\.move\(\{ workspace = '1', follow = false, window = 'address:0xabc' \}\)/)
