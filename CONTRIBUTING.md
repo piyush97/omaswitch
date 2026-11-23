@@ -30,7 +30,7 @@ journalctl --user -f | grep -Ei 'piyush.omaswitch|Switcher.qml|qml.*(error|warni
 ## Before opening a pull request
 
 ```bash
-node test_model.js
+node --test tests/*.test.js
 omarchy plugin validate .
 git diff --check
 ```

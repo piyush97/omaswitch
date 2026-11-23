@@ -1,5 +1,5 @@
 const assert = require("node:assert/strict")
-const Model = require("./Model.js")
+const Model = require("../Model.js")
 
 const active = { title: "Browser", activated: true, wayland: { appId: "chromium" }, workspace: { id: 1 }, lastIpcObject: { focusHistoryID: 0 } }
 const previous = { title: "Terminal", activated: false, wayland: { appId: "foot" }, workspace: { id: 2 }, lastIpcObject: { focusHistoryID: 1 } }
@@ -71,6 +71,7 @@ const liveWindow = {
   activated: true,
   wayland: { appId: "code" },
   workspace: { id: 4 },
+  monitor: { name: "DP-1" },
   lastIpcObject: { focusHistoryID: 2 }
 }
 const snapshot = Model.windowSnapshot(liveWindow)
@@ -79,8 +80,11 @@ assert.deepEqual(snapshot, {
   title: "Editor",
   activated: true,
   workspace: { id: 4 },
+  monitor: { name: "DP-1" },
   lastIpcObject: { class: "code", focusHistoryID: 2 }
 })
+assert.notEqual(snapshot.monitor, liveWindow.monitor, "monitor metadata must be copied")
+assert.deepEqual(Model.scopedWindows([snapshot], "monitor", { monitorName: "DP-1" }), [snapshot])
 assert.equal(snapshot.wayland, undefined, "delegate snapshots must not retain Toplevel QObjects")
 assert.notEqual(snapshot.workspace, liveWindow.workspace, "workspace metadata must be copied")
 assert.equal(Model.windowForAddress([liveWindow], "abc"), liveWindow)
@@ -140,35 +144,44 @@ assert.equal(Model.focusCommand({ address: "abc'; touch /tmp/pwned; '" }), null,
 // Exercise the shipped QML capture handlers without a compositor or timing luck.
 const fs = require("node:fs")
 const vm = require("node:vm")
-const qml = fs.readFileSync(__dirname + "/Switcher.qml", "utf8")
+const qml = fs.readFileSync(__dirname + "/../Switcher.qml", "utf8")
+const ocrIndexer = fs.readFileSync(__dirname + "/../services/OcrIndexer.qml", "utf8")
+assert.match(qml, /function setFilter\(value\) \{[^}]*\n  \}\s+function refresh\(\)/, "close the filter handler before declaring refresh")
+assert.match(qml, /onTextByAddressChanged:\s*root\.rebuildRows\(\)/)
+for (const event of ["Inserted", "Removed"])
+  assert.match(qml, new RegExp(`onObject${event}Post\\(\\) [^}]*root\\.refresh\\(\\)[^}]*ocrIndexer\\.beginOcrIndex\\(\\)`))
+assert.match(ocrIndexer, /onStreamFinished: \{\s*ocrProcess\.output = text\s*ocrProcess\.streamDone = true\s*ocrProcess\.maybeComplete\(\)/)
+assert.match(ocrIndexer, /visible: root\.enabled && root\.ocrCaptureSource !== null/)
 assert.match(qml, /\.map\(Model\.windowSnapshot\)/, "ListView rows must use scalar snapshots")
 assert.match(qml, /function refresh\(\) \{\s*allWindows = Model\.sortedWindows\(Model\.managedWindows\(Hyprland\.toplevels\.values\)/,
   "rows must skip stale workspace-less toplevels")
-assert.match(qml, /onObjectRemovedPre\(window\)[\s\S]*?previewSourceA === source[\s\S]*?previewSourceB === source[\s\S]*?resetPreview\(\)/,
+const previewQml = fs.readFileSync(__dirname + "/../components/PreviewPane.qml", "utf8")
+assert.match(qml, /onObjectRemovedPre\(window\)[^}]*previewPane\.release\(/)
+assert.match(previewQml, /function release\(source\)[^}]*previewSourceA === source[^}]*previewSourceB === source[^}]*resetPreview\(\)/,
   "capture sources must clear before any retained toplevel is destroyed")
 assert.match(qml, /function close\(\)[\s\S]*?root\.rows = \[\][\s\S]*?root\.allWindows = \[\]/,
   "closing the overlay must release all row snapshots")
-assert.match(qml, /filterText\.trim\(\)\.length >= 3[\s\S]*?beginOcrIndex\(\)/,
+assert.match(ocrIndexer, /query\.trim\(\)\.length >= 3[\s\S]*?beginOcrIndex\(\)/,
   "OCR must remain lazy until a meaningful search query exists")
 assert.ok(
-  qml.includes('"timeout", "8s", "tesseract", path, "stdout"') &&
-  qml.includes('"--dpi", "150", "tsv"]') &&
-  qml.includes('Quickshell.execDetached(["rm", "-f", path])'),
+  ocrIndexer.includes('"timeout", "8s", "tesseract", path, "stdout"') &&
+  ocrIndexer.includes('"--dpi", "150", "tsv"]') &&
+  ocrIndexer.includes('Quickshell.execDetached(["rm", "-f", path])'),
   "OCR must invoke local tesseract without a shell and delete its temporary capture"
 )
-assert.match(qml, /\^\[A-Za-z0-9_\+\-\]\+\$[\s\S]*?languages = "eng"/,
+assert.match(ocrIndexer, /\^\[A-Za-z0-9_\+\-\]\+\$[\s\S]*?languages = "eng"/,
   "OCR language configuration must be validated before reaching a process")
-assert.match(qml, /runtimeDir[\s\S]*?\(\^\|\\\/\)\\\.\\\.\(\\\/\|\$\)/,
+assert.match(ocrIndexer, /runtimeDir[\s\S]*?\(\^\|\\\/\)\\\.\\\.\(\\\/\|\$\)/,
   "OCR must reject unsafe runtime directory traversal")
-assert.match(qml, /function resetOcr\(\)[\s\S]*?ocrTextByAddress = \(\{\}\)/,
+assert.match(ocrIndexer, /function reset\(\)[\s\S]*?ocrTextByAddress = \(\{\}\)/,
   "OCR text must remain session-only and clear when the overlay closes")
-assert.match(qml, /omaswitch-ocr-" \+[\s\S]*?Date\.now\(\)[\s\S]*?Math\.random\(\)/,
+assert.match(ocrIndexer, /omaswitch-ocr-" \+[\s\S]*?Date\.now\(\)[\s\S]*?Math\.random\(\)/,
   "each OCR capture must use a unique runtime-directory path")
-assert.match(qml, /property int generation: -1[\s\S]*?property bool streamDone: false[\s\S]*?property bool exitedDone: false[\s\S]*?property bool active: false/,
+assert.match(ocrIndexer, /property int generation: -1[\s\S]*?property bool streamDone: false[\s\S]*?property bool exitedDone: false[\s\S]*?property bool active: false/,
   "OCR process reuse must wait for an immutable generation and both exit signals")
-assert.match(qml, /function onObjectRemovedPre\(window\) \{[\s\S]*?root\.resetOcr\(\)/,
+assert.match(qml, /function onObjectRemovedPre\(window\) \{[\s\S]*?ocrIndexer\.reset\(\)/,
   "window topology changes must clear cached OCR text before an address can be reused")
-const grabHandler = qml.match(/^  function grabOcrFrame\(\) \{[\s\S]*?^  \}/m)
+const grabHandler = ocrIndexer.match(/^  function grabOcrFrame\(\) \{[\s\S]*?^  \}/m)
 assert.ok(grabHandler)
 const captureContext = vm.createContext({
   Qt: { size: function(width, height) { return { width, height } } },
@@ -201,9 +214,9 @@ for (const [width, height, dpr, expectedWidth, expectedHeight] of [
   assert.deepEqual([Math.round(target.width * dpr), Math.round(target.height * dpr)], [expectedWidth, expectedHeight],
     "OCR capture must enlarge small glyphs, preserve aspect ratio, and bound physical pixels independently of display scaling")
 }
-const timeoutHandler = qml.match(/id: previewCaptureTimeout[\s\S]*?onTriggered: \{([\s\S]*?)^    \}/m)
+const timeoutHandler = previewQml.match(/id: previewCaptureTimeout[\s\S]*?onTriggered: \{([\s\S]*?)^    \}/m)
 assert.ok(timeoutHandler, "pending preview captures must have bounded cancellation")
-const targetHandler = qml.match(/^  onPreviewTargetChanged: \{([\s\S]*?)^  \}/m)
+const targetHandler = previewQml.match(/^  onPreviewTargetChanged: \{([\s\S]*?)^  \}/m)
 assert.ok(targetHandler)
 const root = {
   opened: true, previewTarget: null, previewSourceA: null, previewSourceB: null,
@@ -223,7 +236,7 @@ const context = vm.createContext({
 })
 Object.defineProperty(context, "previewTarget", { get: function() { return root.previewTarget } })
 for (const name of ["queuePreview", "previewReady", "cancelPendingPreview", "resetPreview"]) {
-  const handler = qml.match(new RegExp("^  function " + name + "\\([^)]*\\) \\{[\\s\\S]*?^  \\}", "m"))
+  const handler = previewQml.match(new RegExp("^  function " + name + "\\([^)]*\\) \\{[\\s\\S]*?^  \\}", "m"))
   assert.ok(handler, name)
   root[name] = vm.runInContext("(" + handler[0] + ")", context)
 }
@@ -400,3 +413,66 @@ for (var replayIndex = replayed.length - 1; replayIndex >= 0; replayIndex--)
   seededMru = Model.promoteAddress(seededMru, replayed[replayIndex])
 assert.deepEqual(seededMru, ["ddd", "eee", "aaa", "bbb", "ccc"])
 console.log("Model checks passed")
+
+// --- Task 3: scopedWindows, titleMatch, displayRows, windowRowIndex, stepWindowRow, clampSelection, matchSnippet, appCycleIndex, closeTarget, moveHereLua ---
+
+const a1 = { address: "0xa1", title: "App A", workspace: { id: 1 }, monitor: { name: "DP-1" }, wayland: { appId: "app-a" } }
+const b2 = { address: "0xb2", title: "App B", workspace: { id: 2 }, monitor: { name: "HDMI-A-1" }, wayland: { appId: "app-b" } }
+const w1a = { address: "0xw1a", title: "Window 1A", workspace: { id: 1 }, wayland: { appId: "shared-app" } }
+const w2a = { address: "0xw2a", title: "Window 2A", workspace: { id: 2 }, wayland: { appId: "different-app" } }
+const w1b = { address: "0xw1b", title: "Window 1B", workspace: { id: 1 }, wayland: { appId: "shared-app" } }
+const tenWindows = Array.from({ length: 10 }, (_, i) => ({
+  address: "0xten" + i,
+  title: "Window " + i,
+  workspace: { id: 1 },
+  wayland: { appId: "app" + i }
+}))
+const soloRows = Model.displayRows([w1a], { group: false })
+
+// scopedWindows
+assert.deepEqual(Model.scopedWindows([a1, b2], "workspace", { workspaceId: 2 }), [b2])
+assert.deepEqual(Model.scopedWindows([a1, b2], "monitor", { monitorName: "DP-1" }), [a1])
+assert.deepEqual(Model.scopedWindows([a1, b2], "all", {}), [a1, b2])
+
+// displayRows and jump numbers
+const rows = Model.displayRows([w1a, w2a, w1b], { group: true })
+assert.deepEqual(rows.map(r => r.kind), ["header", "window", "window", "header", "window"])
+assert.deepEqual(rows.filter(r => r.kind === "window").map(r => r.jump), [1, 2, 3])
+assert.equal(rows[2].window, w1b)
+assert.deepEqual(Model.displayRows([w1a, w2a], { group: false }).map(r => r.kind), ["window", "window"])
+assert.equal(Model.displayRows(tenWindows, { group: false })[9].jump, null)
+
+// windowRowIndex, stepWindowRow, clampSelection
+assert.equal(Model.windowRowIndex(rows, 3), 4)
+assert.equal(Model.stepWindowRow(rows, 2, 1), 4)
+assert.equal(Model.stepWindowRow(rows, 4, 1), 1)
+assert.equal(Model.clampSelection(rows, 9), 4)
+assert.equal(Model.clampSelection([], 0), -1)
+
+// matchSnippet
+const ocr = { abc: "Build log\n  npm ERR! code ERR_404_DATABASE while fetching 🙂 more text here" }
+assert.deepEqual(Model.matchSnippet(visualOnly, "err_404", ocr, 80).match, "ERR_404")
+assert.equal(Model.matchSnippet(active, "browser", ocr, 80), null)
+assert.deepEqual(Model.matchSnippet(visualOnly, "🙂", { abc: "Build log\nİ 🙂 done" }), {
+  before: "İ ", match: "🙂", after: " done"
+})
+const longSnippet = Model.matchSnippet(visualOnly, "fetching", { abc: "x".repeat(300) + " fetching " + "🙂".repeat(100) }, 40)
+assert.ok((longSnippet.before + longSnippet.match + longSnippet.after).length <= 40)
+assert.ok(!/[\uD800-\uDBFF]$/.test(longSnippet.before))
+assert.ok(!/[\uD800-\uDBFF]$/.test(longSnippet.match))
+assert.ok(!/^[\uDC00-\uDFFF]/.test(longSnippet.after))
+
+// appCycleIndex
+assert.equal(Model.appCycleIndex(rows, 1, 1), 2) // w1a at index 1, next same app is w1b at index 2 (window row)
+assert.equal(Model.appCycleIndex(soloRows, 0, 1), 0)
+
+// titleMatch
+assert.deepEqual(Model.titleMatch({ title: "GitHub - Pull" }, "hub"), { before: "Git", match: "Hub", after: " - Pull" })
+assert.equal(Model.titleMatch({ title: "x" }, ""), null)
+assert.deepEqual(Model.titleMatch({ title: "İ GitHub" }, "hub"), { before: "İ Git", match: "Hub", after: "" })
+
+// moveHereLua and closeTarget
+assert.match(Model.moveHereLua({ address: "0xabc", workspace: { id: 3 } }, 1), /hl\.dsp\.window\.move\(\{ workspace = '1', follow = false, window = 'address:0xabc' \}\)/)
+assert.equal(Model.moveHereLua({ address: "0xabc", workspace: { id: 1 } }, 1), null)
+assert.equal(Model.moveHereLua({ address: "0xabc", workspace: { id: 1 } }, "not a workspace ID"), null)
+assert.equal(Model.closeTarget({}), null)
