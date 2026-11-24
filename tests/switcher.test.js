@@ -59,3 +59,45 @@ test('an omitted focused window makes Alt+Tab start at the first row', () => {
   assert.match(qml, /var firstTarget = root\.focusedOmitted \? 0 : 1/)
   assert.match(qml, /root\.selectedIndex = direction < 0 \? root\.rows\.length - 1 : firstTarget/)
 })
+
+test('a preview click focuses the window whose frame is on screen (#16)', () => {
+  const vm = require('node:vm')
+  const Model = require('../Model.js')
+  const sourceA = { id: 'surface-a' }, sourceB = { id: 'surface-b' }
+  const a = { address: '0xa', title: 'A', wayland: sourceA, workspace: { id: 1 }, lastIpcObject: {} }
+  const b = { address: '0xb', title: 'B', wayland: sourceB, workspace: { id: 1 }, lastIpcObject: {} }
+  assert.equal(Model.windowForSource([a, b], sourceB), b)
+  assert.equal(Model.windowForSource([a], sourceB), null)
+  assert.equal(Model.windowForSource([a], null), null, 'no displayed frame matches nothing')
+  assert.equal(Model.windowForSource(null, sourceA), null)
+
+  const handler = qml.match(/^  function focusPreviewSource\(source\) \{[\s\S]*?^  \}/m)
+  assert.ok(handler)
+  const committed = []
+  const root = {
+    pendingFocus: null,
+    dismiss() {},
+    focusSelected() { committed.push('selection') }
+  }
+  const context = vm.createContext({
+    root, Model,
+    Hyprland: { toplevels: { values: [a, b] } },
+    pendingFocusBackstop: { restart() { committed.push(root.pendingFocus.title) } }
+  })
+  vm.runInContext(handler[0], context)
+  for (const [source, expected] of [[sourceA, 'A'], [sourceB, 'B'], [null, 'selection']]) {
+    committed.length = 0
+    context.focusPreviewSource(source)
+    assert.deepEqual(committed, [expected])
+  }
+  // The frame can belong to a window the filter removed from rows; it still wins.
+  committed.length = 0
+  context.focusPreviewSource(sourceA)
+  assert.deepEqual(committed, ['A'])
+  assert.equal(typeof root.pendingFocus.wayland, 'undefined', 'pendingFocus must be a scalar snapshot')
+
+  const pane = source('components/PreviewPane.qml')
+  assert.match(pane, /signal previewClicked\(var source\)/)
+  assert.match(pane, /root\.previewClicked\(root\.activePreview === 1 \? root\.previewSourceB/)
+  assert.match(qml, /onPreviewClicked: function\(source\) \{ root\.focusPreviewSource\(source\) \}/)
+})

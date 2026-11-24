@@ -2,6 +2,12 @@
 
 All notable changes to OmaSwitch. Versions match `manifest.json` and the [GitHub releases](https://github.com/piyush97/omaswitch/releases).
 
+## [2.1.0]
+
+### Added
+
+- Click the live preview to switch to the window it shows. Previously a click on the preview closed the switcher without switching. Ported from a contribution by grothjan. ([#16](https://github.com/piyush97/omaswitch/pull/16))
+
 ## [2.0.0] — 2026-11-23
 
 ### Added

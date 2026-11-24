@@ -8,6 +8,7 @@ BorderSurface {
   id: root
   property Toplevel window: null
   property var highlights: []
+  signal previewClicked(var source)
   property bool captureEnabled: true
   readonly property bool opened: captureEnabled && visible
   property int previewConstraintWidth: 580
@@ -168,6 +169,16 @@ BorderSurface {
         Math.min(root.previewConstraintWidth, parent.width),
         Math.min(root.previewConstraintHeight, parent.height))
       onHasContentChanged: if (hasContent) root.previewReady(1)
+    }
+
+    // Clicking the frame commits the window it shows, which can briefly
+    // differ from the selected row while a retarget is in flight.
+    MouseArea {
+      anchors.fill: parent
+      z: 3
+      cursorShape: Qt.PointingHandCursor
+      onClicked: root.previewClicked(root.activePreview === 1 ? root.previewSourceB
+        : root.activePreview === 0 ? root.previewSourceA : null)
     }
 
     // Where an OCR-only match was found, from Tesseract's layout boxes.
