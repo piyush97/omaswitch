@@ -208,6 +208,16 @@ Item {
     pendingFocusBackstop.restart()
   }
 
+  // A preview click commits the window whose frame is on screen, queued as a
+  // scalar snapshot like a row. With no frame shown, commit the selection.
+  function focusPreviewSource(source) {
+    var window = Model.windowForSource(Hyprland.toplevels.values, source)
+    if (!window) return root.focusSelected()
+    root.pendingFocus = Model.windowSnapshot(window)
+    root.dismiss()
+    pendingFocusBackstop.restart()
+  }
+
   function select(delta) {
     selectedIndex = cycleApp ? Model.appCycleIndex(rows, selectedIndex, delta) : Model.stepWindowRow(rows, selectedIndex, delta)
     keepSelectionVisible.restart()
@@ -529,6 +539,7 @@ Item {
           captureEnabled: root.opened && root.previewLayout && !root.settingsOpen && !root.helpOpen
           previewConstraintWidth: root.previewConstraintWidth
           previewConstraintHeight: root.previewConstraintHeight
+          onPreviewClicked: function(source) { root.focusPreviewSource(source) }
         }
       }
       SettingsView {

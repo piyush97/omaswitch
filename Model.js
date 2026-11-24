@@ -300,6 +300,16 @@ function scopedWindows(windows, scope, ctx) {
   return source
 }
 
+// Map a preview capture source back to its toplevel. Search every toplevel,
+// not the filtered rows: the frame on screen can outlive its row.
+function windowForSource(values, source) {
+  if (!source) return null
+  var list = values && typeof values.slice === "function" ? values : []
+  for (var i = 0; i < list.length; i++)
+    if (list[i] && list[i].wayland === source) return list[i]
+  return null
+}
+
 // A window is omitted from the switcher when its app/class or title matches
 // any pattern in the configured omit list (compiled case-insensitive regexes).
 function excluded(window, patterns) {
@@ -507,6 +517,7 @@ if (typeof module !== "undefined") module.exports = {
   focusCommand: focusCommand,
   scopedWindows: scopedWindows,
   excluded: excluded,
+  windowForSource: windowForSource,
   titleMatch: titleMatch,
   displayRows: displayRows,
   windowRowIndex: windowRowIndex,
