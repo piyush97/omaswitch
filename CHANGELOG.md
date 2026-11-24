@@ -2,7 +2,7 @@
 
 All notable changes to OmaSwitch. Versions match `manifest.json` and the [GitHub releases](https://github.com/piyush97/omaswitch/releases).
 
-## [2.1.0]
+## [2.0.1] — 2026-11-24
 
 ### Added
 
@@ -84,6 +84,7 @@ All notable changes to OmaSwitch. Versions match `manifest.json` and the [GitHub
 ### Documentation
 - Clarified that installing does not replace Omarchy's default `Alt+Tab` bindings.
 
+[2.0.1]: https://github.com/piyush97/omaswitch/releases/tag/v2.0.1
 [2.0.0]: https://github.com/piyush97/omaswitch/releases/tag/v2.0.0
 [1.3.3]: https://github.com/piyush97/omaswitch/releases/tag/v1.3.3
 [1.3.2]: https://github.com/piyush97/omaswitch/releases/tag/v1.3.2
