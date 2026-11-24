@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "piyush.omaswitch",
   "name": "OmaSwitch",
-  "version": "2.1.0",
+  "version": "2.0.1",
   "author": "piyush97",
   "license": "MIT",
   "description": "Find any open window by what’s on screen.",
